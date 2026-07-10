@@ -56,6 +56,16 @@ void NetworkMgr::loop() {
         }
     }
 
+    // Wi-Fi connection timeout — allow retry
+    if (_wifiConnecting && millis() - _wifiReconnectMs > 15000) {
+        _wifiConnecting = false;
+    }
+
+    // Detect Wi-Fi connected and clear connecting flag
+    if (WiFi.status() == WL_CONNECTED && _wifiConnecting) {
+        _wifiConnecting = false;
+    }
+
     // ── MQTT reconnection ───────────────────────────────────────────────
     if (WiFi.status() == WL_CONNECTED && !_mqttClient.connected() && !_mqttConnecting) {
         unsigned long now = millis();
@@ -160,7 +170,6 @@ void NetworkMgr::_connectWiFi() {
 void NetworkMgr::_connectMQTT() {
     _mqttConnecting = true;
     _mqttReconnectMs = millis();
-    _mqttBackoffMs = 1000;
 
     Serial.print("[MQTT] Connecting to ");
     Serial.print(MQTT_SERVER);
