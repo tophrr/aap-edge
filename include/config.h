@@ -33,9 +33,9 @@
 // HARDWARE & PIN MAPPING (ESP32 DevKit V1)
 // ==========================================
 #define I2S_PORT        I2S_NUM_0
-#define I2S_WS_PIN      15
-#define I2S_SCK_PIN     14
-#define I2S_SD_PIN      32
+#define I2S_WS_PIN      21
+#define I2S_SCK_PIN     19
+#define I2S_SD_PIN      18
 
 // ==========================================
 // DSP & AUDIO PARAMETERS
@@ -64,6 +64,7 @@
 // ==========================================
 // DEEP SLEEP SCHEDULE
 // ==========================================
+#define DEEP_SLEEP_ENABLED      0       // Set to 0 to disable deep sleep
 #define SLEEP_START_HOUR    22
 #define WAKE_END_HOUR       5
 

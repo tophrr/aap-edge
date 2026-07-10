@@ -57,7 +57,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         audioDspTask,       // task function
         "audioDsp",         // name
-        4096,               // stack size
+        8192,               // stack size
         (void*)audioQueue,  // parameters
         2,                  // priority
         nullptr,            // task handle
@@ -153,7 +153,7 @@ static void fsmTask(void* parameter) {
             }
 
             // Check deep sleep
-            if (now > 100000) {
+            if (now > 100000 && DEEP_SLEEP_ENABLED) {
                 checkDeepSleep(now);
             }
         }
@@ -203,6 +203,8 @@ static void syncNTP() {
 // ── Deep Sleep ──────────────────────────────────────────────────────────────
 
 static void checkDeepSleep(time_t now) {
+    if (!DEEP_SLEEP_ENABLED) return;
+
     struct tm* timeinfo = localtime(&now);
     int hour = timeinfo->tm_hour;
 
