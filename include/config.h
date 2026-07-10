@@ -1,5 +1,13 @@
 #pragma once
 
+#include <Arduino.h>
+
+extern bool g_debugEnabled;
+
+#define DEBUG_PRINT(...) do { if (g_debugEnabled) Serial.print(__VA_ARGS__); } while (0)
+#define DEBUG_PRINTLN(...) do { if (g_debugEnabled) Serial.println(__VA_ARGS__); } while (0)
+#define DEBUG_PRINTF(...) do { if (g_debugEnabled) Serial.printf(__VA_ARGS__); } while (0)
+
 // Load credentials from secrets.h (gitignored — see secrets.h.example)
 // If missing, provides placeholder defaults so the build doesn't break.
 #if __has_include("secrets.h")

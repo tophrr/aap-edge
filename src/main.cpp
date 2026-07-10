@@ -24,6 +24,8 @@ static NetworkMgr networkMgr;
 static FSMEngine fsm;
 static SemaphoreHandle_t fsmMutex = nullptr;
 
+bool g_debugEnabled = false;
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 
 void setup() {
@@ -125,6 +127,26 @@ static void fsmTask(void* parameter) {
                     event.duration_sec);
             }
 
+            // ── Periodic status line ────────────────────────────────────
+            if (g_debugEnabled) {
+                static int statusCount = 0;
+                if (++statusCount % 50 == 0) {
+                    int st;
+                    if (xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                        st = fsm.state();
+                        xSemaphoreGive(fsmMutex);
+                    } else {
+                        st = -1;
+                    }
+                    static const char* stateNames[] = {"IDLE", "PROBING", "ACTIVE"};
+                    const char* stName = (st >= 0 && st <= 2) ? stateNames[st] : "???";
+                    Serial.printf("[STATUS] FSM=%s | main=%.1f sec=%.1f amb=%.1f | heap=%u rssi=%d\n",
+                        stName,
+                        (double)frame.main_db, (double)frame.sec_db, (double)frame.amb_db,
+                        ESP.getFreeHeap(), WiFi.RSSI());
+                }
+            }
+
             // Periodic heartbeat
             if (networkMgr.timeSynced() &&
                 uptimeSec - networkMgr.lastHeartbeatSec() >= HEARTBEAT_INTERVAL_SEC) {
@@ -179,8 +201,14 @@ static void configCallback(const char* json) {
     if (doc["confirm_sec"].is<float>())          cfg.confirm_sec = doc["confirm_sec"];
     if (doc["probing_timeout_sec"].is<float>())  cfg.probing_timeout_sec = doc["probing_timeout_sec"];
     if (doc["active_timeout_sec"].is<float>())   cfg.active_timeout_sec = doc["active_timeout_sec"];
+    if (doc["debug_enabled"].is<bool>()) {
+        g_debugEnabled = doc["debug_enabled"].as<bool>();
+    } else if (doc["debug"].is<bool>()) {
+        g_debugEnabled = doc["debug"].as<bool>();
+    }
+    cfg.debug_enabled = g_debugEnabled;
 
-    if (xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (fsmMutex != nullptr && xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         fsm.applyConfig(cfg);
         xSemaphoreGive(fsmMutex);
     }
@@ -190,6 +218,7 @@ static void configCallback(const char* json) {
         (double)cfg.main_snr_threshold, (double)cfg.sec_snr_threshold);
     Serial.printf("  confirm_sec=%.1f, probing_timeout=%.1f, active_timeout=%.1f\n",
         (double)cfg.confirm_sec, (double)cfg.probing_timeout_sec, (double)cfg.active_timeout_sec);
+    Serial.printf("  debug_enabled=%s\n", g_debugEnabled ? "true" : "false");
 }
 
 // ── NTP Sync ───────────────────────────────────────────────────────────────

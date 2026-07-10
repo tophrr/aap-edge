@@ -54,6 +54,23 @@ FSMEvent FSMEngine::processFrame(const AudioFrame& frame, float unix_timestamp_s
 
     bool pulse_train_ok = _signalPulseIsValid(signal_present);
 
+    // ── Verbose debug ─────────────────────────────────────────────────
+    if (g_debugEnabled) {
+        static int fsmFrame = 0;
+        fsmFrame++;
+        {
+            static const char* stateNames[] = {"IDLE", "PROBING", "ACTIVE"};
+            const char* stName = _state <= 2 ? stateNames[_state] : "???";
+            if (fsmFrame <= 200 || fsmFrame % 5 == 0 || signal_present) {
+                Serial.printf("[FSM] #%d | main_snr=%.1f sec_snr=%.1f | signal=%s pulse=%s | state=%s\n",
+                    fsmFrame, (double)main_snr, (double)sec_snr,
+                    signal_present ? "YES" : "no",
+                    pulse_train_ok ? "OK" : "NO",
+                    stName);
+            }
+        }
+    }
+
     // Save previous state to detect transitions
     FSMState prevState = _state;
 
@@ -119,6 +136,7 @@ void FSMEngine::_processStateMachine(
                 _stateEnteredSec = frameEndSec;
                 _probingStartedSec = frameEndSec;
                 _probingActiveSec = 0.0f;
+                DEBUG_PRINTF("[FSM] IDLE \u2192 PROBING (rising edge @ %.1f)\n", (double)frameEndSec);
             }
             break;
 
@@ -126,9 +144,13 @@ void FSMEngine::_processStateMachine(
             float gapSec = frameEndSec - _lastSignalSec;
             if (!signalPresent && gapSec > _config.probing_timeout_sec) {
                 _state = FSM_IDLE;
+                DEBUG_PRINTF("[FSM] PROBING \u2192 IDLE (gap %.1fs > %.1fs)\n",
+                    (double)gapSec, (double)_config.probing_timeout_sec);
             } else if (signalPresent && !pulseTrainOk &&
                        _probingActiveSec > _config.probing_timeout_sec) {
                 _state = FSM_IDLE;
+                DEBUG_PRINTF("[FSM] PROBING \u2192 IDLE (no pulse after %.1fs)\n",
+                    (double)_probingActiveSec);
             } else if (pulseTrainOk && signalPresent &&
                        _probingActiveSec > _config.confirm_sec) {
                 _state = FSM_ACTIVE;
@@ -136,6 +158,8 @@ void FSMEngine::_processStateMachine(
                 _activeAtSec = frameEndSec;
                 _eventStartedSec = frameEndSec;
                 ++_eventsToday;
+                DEBUG_PRINTF("[FSM] PROBING \u2192 ACTIVE (pulse confirmed @ %.1fs)\n",
+                    (double)_probingActiveSec);
             }
             break;
         }
@@ -144,6 +168,8 @@ void FSMEngine::_processStateMachine(
             float gapSec = frameEndSec - _lastSignalSec;
             if (gapSec > _config.active_timeout_sec) {
                 _state = FSM_IDLE;
+                DEBUG_PRINTF("[FSM] ACTIVE \u2192 IDLE (gap %.1fs > %.1fs)\n",
+                    (double)gapSec, (double)_config.active_timeout_sec);
             }
             break;
         }

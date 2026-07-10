@@ -103,6 +103,24 @@ void audioDspTask(void* parameter) {
         int samplesRead = bytesRead / sizeof(int32_t);
         if (samplesRead < NUM_SAMPLES) continue;
 
+        // ── Raw sample diagnostic (first frame only) ──────────────────
+        if (g_debugEnabled) {
+            static bool rawDiagDone = false;
+            if (!rawDiagDone) {
+                int nonzero = 0;
+                for (int i = 0; i < samplesRead; ++i) {
+                    if (rawSamples[i] != 0) ++nonzero;
+                }
+                Serial.printf("[DSP] Raw samples (32-bit): %d total, %d non-zero, first 16: ",
+                    samplesRead, nonzero);
+                for (int i = 0; i < min(16, samplesRead); ++i) {
+                    Serial.printf("0x%08X ", rawSamples[i]);
+                }
+                DEBUG_PRINTLN("");
+                rawDiagDone = true;
+            }
+        }
+
         // Convert raw I2S words to float [-1.0, 1.0].
         // INMP441 sends 24-bit standard I2S samples that appear in the top
         // portion of each 32-bit word after the 1-bit data delay.
@@ -118,6 +136,33 @@ void audioDspTask(void* parameter) {
         float main_db = goertzelDB(floatSamples, samplesRead, MAIN_FREQ_HZ, SAMPLE_RATE);
         float sec_db  = goertzelDB(floatSamples, samplesRead, SEC_FREQ_HZ, SAMPLE_RATE);
         float amb_db  = goertzelDB(floatSamples, samplesRead, AMB_FREQ_HZ, SAMPLE_RATE);
+
+        // ── Verbose debug: print every frame for tuning ────────────────
+        if (g_debugEnabled) {
+            static int dspFrame = 0;
+            dspFrame++;
+            float main_snr = main_db - amb_db;
+            float sec_snr = sec_db - amb_db;
+            // Raw sample stats (useful for verifying mic is working)
+            int32_t rawMin = rawSamples[0];
+            int32_t rawMax = rawSamples[0];
+
+            float sumSq = 0;
+            for (int i = 0; i < samplesRead; ++i) {
+                sumSq += floatSamples[i] * floatSamples[i];
+                if (rawSamples[i] < rawMin) rawMin = rawSamples[i];
+                if (rawSamples[i] > rawMax) rawMax = rawSamples[i];
+            }
+            float rms = sqrtf(sumSq / samplesRead);
+            float rms_db = 20.0f * log10f(rms + 1e-12f);
+            // Print every frame for first 200, then every 5, or anytime SNR > 0
+            if (dspFrame <= 200 || dspFrame % 5 == 0 || main_snr > 0 || sec_snr > 0) {
+                Serial.printf("[DSP] #%d | RMS=%.1fdB raw=[%d,%d] | main=%.1f sec=%.1f amb=%.1f | main_snr=%.1f sec_snr=%.1f\n",
+                    dspFrame, (double)rms_db, rawMin, rawMax,
+                    (double)main_db, (double)sec_db, (double)amb_db,
+                    (double)main_snr, (double)sec_snr);
+            }
+        }
 
         // Send to FSM task via queue
         AudioFrame frame = { main_db, sec_db, amb_db };

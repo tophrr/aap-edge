@@ -39,6 +39,7 @@ struct RuntimeConfig {
     float confirm_sec = CONFIRM_SEC;
     float probing_timeout_sec = PROBING_TIMEOUT_SEC;
     float active_timeout_sec = ACTIVE_TIMEOUT_SEC;
+    bool debug_enabled = false;
 };
 
 // ── FSM Engine ──────────────────────────────────────────────────────────────
