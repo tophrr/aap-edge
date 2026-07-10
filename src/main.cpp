@@ -29,7 +29,7 @@ bool g_debugEnabled = false;
 // ── Setup ───────────────────────────────────────────────────────────────────
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(460800);
     delay(500);
     Serial.println("\n\n===================================");
     Serial.println("Acoustic ATCS Proxy Node");
@@ -59,7 +59,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         audioDspTask,       // task function
         "audioDsp",         // name
-        NUM_SAMPLES * 2 * sizeof(float) + 1024,  // stack size (1600 samples × 2 arrays × 4 bytes + overhead)
+        4096 + (NUM_SAMPLES * 2 * sizeof(float)) + 1024,
         (void*)audioQueue,  // parameters
         2,                  // priority
         nullptr,            // task handle
@@ -70,7 +70,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         fsmTask,
         "fsm",
-        NUM_SAMPLES * 3 * sizeof(float) + 1024,  // stack size (1600 samples × 3 floats × 4 bytes + overhead)
+        4096 + (NUM_SAMPLES * sizeof(float)) + 1024,
         (void*)audioQueue,
         1,
         nullptr,
