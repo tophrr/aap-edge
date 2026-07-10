@@ -57,7 +57,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         audioDspTask,       // task function
         "audioDsp",         // name
-        8192,               // stack size
+        NUM_SAMPLES * 2 * sizeof(float) + 1024,  // stack size (1600 samples × 2 arrays × 4 bytes + overhead)
         (void*)audioQueue,  // parameters
         2,                  // priority
         nullptr,            // task handle
@@ -68,7 +68,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         fsmTask,
         "fsm",
-        4096,
+        NUM_SAMPLES * 3 * sizeof(float) + 1024,  // stack size (1600 samples × 3 floats × 4 bytes + overhead)
         (void*)audioQueue,
         1,
         nullptr,

@@ -9,9 +9,9 @@
 static i2s_config_t _i2sConfig = {
     .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
     .sample_rate = SAMPLE_RATE,
-    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-    .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+    .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
+    .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
     .dma_buf_count = 4,
     .dma_buf_len = 256,
@@ -42,7 +42,9 @@ void initI2S() {
         abort();
     }
 
-    Serial.println("[I2S] Initialized: 8000 Hz, 16-bit mono, INMP441");
+    i2s_zero_dma_buffer(I2S_PORT);
+
+    Serial.println("[I2S] Initialized: " + String(SAMPLE_RATE) + " Hz, " + String(I2S_BITS_PER_SAMPLE_32BIT) + "-bit mono, INMP441");
 }
 
 // ── Goertzel Algorithm ──────────────────────────────────────────────────────
@@ -82,8 +84,8 @@ static void applyHann(float* samples, int numSamples) {
 
 void audioDspTask(void* parameter) {
     QueueHandle_t audioQueue = (QueueHandle_t)parameter;
-    int16_t rawSamples[NUM_SAMPLES];
-    float floatSamples[NUM_SAMPLES];
+    static int32_t rawSamples[NUM_SAMPLES];
+    static float floatSamples[NUM_SAMPLES];
     size_t bytesRead = 0;
 
     Serial.println("[AudioDSP] Task started on Core 0");
@@ -98,12 +100,15 @@ void audioDspTask(void* parameter) {
             continue;
         }
 
-        int samplesRead = bytesRead / sizeof(int16_t);
-        if (samplesRead < 32) continue;
+        int samplesRead = bytesRead / sizeof(int32_t);
+        if (samplesRead < NUM_SAMPLES) continue;
 
-        // Convert int16 to float [-1.0, 1.0]
+        // Convert raw I2S words to float [-1.0, 1.0].
+        // INMP441 sends 24-bit standard I2S samples that appear in the top
+        // portion of each 32-bit word after the 1-bit data delay.
         for (int i = 0; i < samplesRead; ++i) {
-            floatSamples[i] = (float)rawSamples[i] / 32768.0f;
+            int32_t sample24 = rawSamples[i] >> 8;  // Shift to get 24-bit value
+            floatSamples[i] = (float)sample24 / 8388608.0f;  // Normalize to [-1.0, 1.0]
         }
 
         // Apply Hann window

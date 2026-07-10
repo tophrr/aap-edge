@@ -40,9 +40,9 @@
 // ==========================================
 // DSP & AUDIO PARAMETERS
 // ==========================================
-#define SAMPLE_RATE     8000
+#define SAMPLE_RATE     16000
 #define WINDOW_SEC      0.1f
-#define NUM_SAMPLES     (int)(SAMPLE_RATE * WINDOW_SEC)  // 800
+#define NUM_SAMPLES     (int)(SAMPLE_RATE * WINDOW_SEC)  // 1600
 
 #define MAIN_FREQ_HZ    1253.0f
 #define SEC_FREQ_HZ     662.0f
