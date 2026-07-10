@@ -21,7 +21,7 @@ public:
                           int state, int eventsToday, int mqttReconnects);
 
     // Status
-    bool connected() const;
+    bool connected();
     bool timeSynced() const;
     unsigned long lastHeartbeatSec() const { return _lastHeartbeatSec; }
     unsigned long lastTelemetrySec() const { return _lastTelemetrySec; }

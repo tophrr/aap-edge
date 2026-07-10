@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <deque>
+#include "config.h"
 
 // ── FSM State ───────────────────────────────────────────────────────────────
 

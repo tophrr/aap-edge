@@ -174,11 +174,11 @@ static void configCallback(const char* json) {
 
     RuntimeConfig cfg = fsm.getConfig();
 
-    if (doc.containsKey("main_snr_db"))     cfg.main_snr_threshold = doc["main_snr_db"];
-    if (doc.containsKey("sec_snr_db"))      cfg.sec_snr_threshold = doc["sec_snr_db"];
-    if (doc.containsKey("confirm_sec"))     cfg.confirm_sec = doc["confirm_sec"];
-    if (doc.containsKey("probing_timeout_sec")) cfg.probing_timeout_sec = doc["probing_timeout_sec"];
-    if (doc.containsKey("active_timeout_sec"))  cfg.active_timeout_sec = doc["active_timeout_sec"];
+    if (doc["main_snr_db"].is<float>())          cfg.main_snr_threshold = doc["main_snr_db"];
+    if (doc["sec_snr_db"].is<float>())           cfg.sec_snr_threshold = doc["sec_snr_db"];
+    if (doc["confirm_sec"].is<float>())          cfg.confirm_sec = doc["confirm_sec"];
+    if (doc["probing_timeout_sec"].is<float>())  cfg.probing_timeout_sec = doc["probing_timeout_sec"];
+    if (doc["active_timeout_sec"].is<float>())   cfg.active_timeout_sec = doc["active_timeout_sec"];
 
     if (xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         fsm.applyConfig(cfg);

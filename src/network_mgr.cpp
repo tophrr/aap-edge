@@ -1,7 +1,6 @@
 #include "network_mgr.h"
 #include "config.h"
-#include <esp_wifi.h>
-#include <esp_eap_client.h>
+#include <esp_wpa2.h>
 
 // ── Constructor ─────────────────────────────────────────────────────────────
 
@@ -82,7 +81,7 @@ void NetworkMgr::loop() {
     }
 }
 
-bool NetworkMgr::connected() const {
+bool NetworkMgr::connected() {
     return WiFi.status() == WL_CONNECTED && _mqttClient.connected();
 }
 
@@ -154,10 +153,10 @@ void NetworkMgr::_connectWiFi() {
 
     if (strlen(WIFI_EAP_USERNAME) > 0) {
         Serial.println(" (WPA2-Enterprise)");
-        esp_eap_client_set_identity((uint8_t*)WIFI_EAP_IDENTITY, strlen(WIFI_EAP_IDENTITY));
-        esp_eap_client_set_username((uint8_t*)WIFI_EAP_USERNAME, strlen(WIFI_EAP_USERNAME));
-        esp_eap_client_set_password((uint8_t*)WIFI_EAP_PASSWORD, strlen(WIFI_EAP_PASSWORD));
-        esp_wifi_sta_enterprise_enable();
+        esp_wifi_sta_wpa2_ent_set_identity((unsigned char*)WIFI_EAP_IDENTITY, strlen(WIFI_EAP_IDENTITY));
+        esp_wifi_sta_wpa2_ent_set_username((unsigned char*)WIFI_EAP_USERNAME, strlen(WIFI_EAP_USERNAME));
+        esp_wifi_sta_wpa2_ent_set_password((unsigned char*)WIFI_EAP_PASSWORD, strlen(WIFI_EAP_PASSWORD));
+        esp_wifi_sta_wpa2_ent_enable();
         WiFi.begin(WIFI_SSID);
     } else {
         Serial.println(" (WPA2-PSK)");
