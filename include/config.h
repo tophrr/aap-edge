@@ -1,16 +1,26 @@
 #pragma once
 
-// ==========================================
-// NETWORK CONFIGURATION
-// ==========================================
-#define WIFI_SSID           "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD       "YOUR_WIFI_PASSWORD"
-#define WIFI_EAP_IDENTITY   "anonymous@domain"
-#define WIFI_EAP_USERNAME   ""
-#define WIFI_EAP_PASSWORD   ""
+// Load credentials from secrets.h (gitignored — see secrets.h.example)
+// If missing, provides placeholder defaults so the build doesn't break.
+#if __has_include("secrets.h")
+    #include "secrets.h"
+#else
+    #pragma message "------------------------------------------------------------"
+    #pragma message "secrets.h not found! Copy include/secrets.h.example to"
+    #pragma message "include/secrets.h and fill in your real credentials."
+    #pragma message "------------------------------------------------------------"
+    #define WIFI_SSID           "CHANGE_ME"
+    #define WIFI_PASSWORD       ""
+    #define WIFI_EAP_IDENTITY   ""
+    #define WIFI_EAP_USERNAME   ""
+    #define WIFI_EAP_PASSWORD   ""
+    #define MQTT_SERVER         "CHANGE_ME"
+    #define MQTT_PORT           1883
+#endif
 
-#define MQTT_SERVER                 "192.168.1.100"
-#define MQTT_PORT                   1883
+// ==========================================
+// MQTT TOPICS
+// ==========================================
 #define MQTT_TOPIC_EVENT            "crossing/event"
 #define MQTT_TOPIC_HEARTBEAT        "crossing/heartbeat"
 #define MQTT_TOPIC_TELEMETRY        "crossing/telemetry"
