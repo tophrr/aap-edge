@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <time.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 
 #include "config.h"
 #include "fsm.h"
@@ -16,6 +17,7 @@ static void fsmTask(void* parameter);
 static void configCallback(const char* json);
 static void checkDeepSleep(time_t now);
 static void syncNTP();
+static void initOTA();
 
 // ── Globals ─────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,9 @@ void setup() {
 
     // NTP sync will complete during first few seconds of runtime
     syncNTP();
+
+    // Initialize OTA (starts listening when WiFi is available)
+    initOTA();
 
     // Create audio queue (IPC between Core 0 and Core 1)
     audioQueue = xQueueCreate(AUDIO_QUEUE_SIZE, sizeof(AudioFrame));
@@ -103,6 +108,9 @@ static void fsmTask(void* parameter) {
 
             // Maintain network connection
             networkMgr.loop();
+
+            // Handle OTA updates
+            ArduinoOTA.handle();
 
             // Process frame through FSM (protected by mutex for config safety)
             FSMEvent event;
@@ -263,4 +271,39 @@ static void checkDeepSleep(time_t now) {
         esp_sleep_enable_timer_wakeup(sleepUs);
         esp_deep_sleep_start();
     }
+}
+
+// ── OTA Initialization ──────────────────────────────────────────────────────
+
+static void initOTA() {
+    String hostname = "aap-node-";
+    hostname += String((uint32_t)(ESP.getEfuseMac() & 0xFFFFFF), HEX);
+
+    ArduinoOTA.setHostname(hostname.c_str());
+    ArduinoOTA.setPort(OTA_PORT);
+
+    ArduinoOTA.onStart([]() {
+        String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+        Serial.printf("[OTA] Start: %s\n", type.c_str());
+    });
+
+    ArduinoOTA.onEnd([]() {
+        Serial.println("[OTA] Done");
+    });
+
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("[OTA] Progress: %u%%\r", progress / (total / 100));
+    });
+
+    ArduinoOTA.onError([](ota_error_t error) {
+        Serial.printf("[OTA] Error %u: ", error);
+        if (error == OTA_AUTH_ERROR)       Serial.println("Auth Failed");
+        else if (error == OTA_BEGIN_ERROR)  Serial.println("Begin Failed");
+        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+        else if (error == OTA_END_ERROR)    Serial.println("End Failed");
+    });
+
+    ArduinoOTA.begin();
+    Serial.printf("[OTA] Ready on port %d (hostname: %s)\n", OTA_PORT, hostname.c_str());
 } 

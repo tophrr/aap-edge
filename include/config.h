@@ -78,6 +78,12 @@ extern bool g_debugEnabled;
 #define WAKE_END_HOUR       5
 
 // ==========================================
+// OTA (Over-the-Air) Update
+// ==========================================
+#define OTA_ENABLED             1
+#define OTA_PORT                3232
+
+// ==========================================
 // FREERTOS
 // ==========================================
 #define AUDIO_QUEUE_SIZE    10
