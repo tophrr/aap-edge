@@ -6,14 +6,14 @@
 
 FSMEngine::FSMEngine()
     : _state(FSM_IDLE)
-    , _stateEnteredSec(0.0f)
-    , _lastSignalSec(0.0f)
-    , _eventStartedSec(0.0f)
+    , _stateEnteredSec(0)
+    , _lastSignalSec(0)
+    , _eventStartedSec(0)
     , _probingActiveSec(0.0f)
     , _signalPrev(false)
     , _eventsToday(0)
-    , _probingStartedSec(0.0f)
-    , _activeAtSec(0.0f)
+    , _probingStartedSec(0)
+    , _activeAtSec(0)
     , _lastSignalMs(0)
     , _signalStreak(0)
 {
@@ -23,14 +23,14 @@ FSMEngine::FSMEngine()
 
 void FSMEngine::reset() {
     _state = FSM_IDLE;
-    _stateEnteredSec = 0.0f;
-    _lastSignalSec = 0.0f;
-    _eventStartedSec = 0.0f;
+    _stateEnteredSec = 0;
+    _lastSignalSec = 0;
+    _eventStartedSec = 0;
     _probingActiveSec = 0.0f;
     _signalPrev = false;
     _eventsToday = 0;
-    _probingStartedSec = 0.0f;
-    _activeAtSec = 0.0f;
+    _probingStartedSec = 0;
+    _activeAtSec = 0;
     _lastSignalMs = 0;
     _signalStreak = 0;
     _signalHistory.clear();
@@ -42,7 +42,7 @@ void FSMEngine::applyConfig(const RuntimeConfig& cfg) {
 
 // ── Frame Processing ────────────────────────────────────────────────────────
 
-FSMEvent FSMEngine::processFrame(const AudioFrame& frame, float unix_timestamp_sec) {
+FSMEvent FSMEngine::processFrame(const AudioFrame& frame, int64_t unix_timestamp_sec) {
     float main_snr = frame.main_db - frame.amb_db;
     float sec_snr = frame.sec_db - frame.amb_db;
     bool signal_present = (
@@ -141,7 +141,7 @@ bool FSMEngine::_signalPulseIsValid(bool currentSignalPresent) {
 // ── State Machine ───────────────────────────────────────────────────────────
 
 void FSMEngine::_processStateMachine(
-    float frameEndSec, float frameSec,
+    int64_t frameEndSec, float frameSec,
     bool signalPresent, bool pulseTrainOk,
     float gapSec
 ) {
@@ -163,7 +163,7 @@ void FSMEngine::_processStateMachine(
                 _probingStartedSec = frameEndSec;
                 _probingActiveSec = 0.0f;
                 _lastSignalMs = millis();
-                DEBUG_PRINTF("[FSM] IDLE \u2192 PROBING (rising edge @ %.1f)\n", (double)frameEndSec);
+                DEBUG_PRINTF("[FSM] IDLE \u2192 PROBING (rising edge @ %lld)\n", (long long)frameEndSec);
             }
             break;
 

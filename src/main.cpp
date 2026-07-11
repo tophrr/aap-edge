@@ -107,21 +107,21 @@ static void fsmTask(void* parameter) {
             // Process frame through FSM (protected by mutex for config safety)
             FSMEvent event;
             if (xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                event = fsm.processFrame(frame, (float)now);
+                event = fsm.processFrame(frame, (int64_t)now);
                 xSemaphoreGive(fsmMutex);
             }
 
             // Publish event if state transition occurred
             if (event.type == FSMEvent::START) {
-                Serial.printf("[Event] START @ %.1f (probing=%.1f, active=%.1f)\n",
-                    (double)event.timestamp_sec,
-                    (double)event.probing_started_sec,
-                    (double)event.active_at_sec);
+                Serial.printf("[Event] START @ %lld (probing=%lld, active=%lld)\n",
+                    (long long)event.timestamp_sec,
+                    (long long)event.probing_started_sec,
+                    (long long)event.active_at_sec);
                 networkMgr.publishEvent("started", event.timestamp_sec,
                     event.probing_started_sec, event.active_at_sec);
             } else if (event.type == FSMEvent::END) {
-                Serial.printf("[Event] END @ %.1f (duration=%.1f)\n",
-                    (double)event.timestamp_sec, (double)event.duration_sec);
+                Serial.printf("[Event] END @ %lld (duration=%.1f)\n",
+                    (long long)event.timestamp_sec, (double)event.duration_sec);
                 networkMgr.publishEvent("ended", event.timestamp_sec,
                     event.probing_started_sec, event.active_at_sec,
                     event.duration_sec);
@@ -226,7 +226,7 @@ static void configCallback(const char* json) {
 // ── NTP Sync ───────────────────────────────────────────────────────────────
 
 static void syncNTP() {
-    configTime(-5 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+    configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
     Serial.println("[NTP] Syncing...");
     // NTP sync happens asynchronously; check timeSynced() before using timestamps
 }

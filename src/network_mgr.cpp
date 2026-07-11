@@ -96,21 +96,21 @@ bool NetworkMgr::publish(const char* topic, const char* payload) {
 
 // ── Publish Helpers ─────────────────────────────────────────────────────────
 
-void NetworkMgr::publishEvent(const char* eventType, float timestamp,
-                               float probingStarted, float activeAt,
+void NetworkMgr::publishEvent(const char* eventType, int64_t timestamp,
+                               int64_t probingStarted, int64_t activeAt,
                                float duration) {
     char buf[256];
     if (strcmp(eventType, "started") == 0) {
         snprintf(buf, sizeof(buf),
-            "{\"event\":\"started\",\"probing_started_at\":%.1f,"
-            "\"active_at\":%.1f,\"timestamp\":%.1f}",
-            (double)probingStarted, (double)activeAt, (double)timestamp);
+            "{\"event\":\"started\",\"probing_started_at\":%lld,"
+            "\"active_at\":%lld,\"timestamp\":%lld}",
+            (long long)probingStarted, (long long)activeAt, (long long)timestamp);
     } else {
         snprintf(buf, sizeof(buf),
-            "{\"event\":\"ended\",\"ended_at\":%.1f,\"duration\":%.1f,"
-            "\"probing_started_at\":%.1f,\"active_at\":%.1f,\"timestamp\":%.1f}",
-            (double)timestamp, (double)duration,
-            (double)probingStarted, (double)activeAt, (double)timestamp);
+            "{\"event\":\"ended\",\"ended_at\":%lld,\"duration\":%.1f,"
+            "\"probing_started_at\":%lld,\"active_at\":%lld,\"timestamp\":%lld}",
+            (long long)timestamp, (double)duration,
+            (long long)probingStarted, (long long)activeAt, (long long)timestamp);
     }
     publish(MQTT_TOPIC_EVENT, buf);
 }

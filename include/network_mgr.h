@@ -12,8 +12,8 @@ public:
 
     // Publish helpers
     bool publish(const char* topic, const char* payload);
-    void publishEvent(const char* eventType, float timestamp,
-                      float probingStarted, float activeAt,
+    void publishEvent(const char* eventType, int64_t timestamp,
+                      int64_t probingStarted, int64_t activeAt,
                       float duration = 0.0f);
     void publishHeartbeat(unsigned long uptimeSec);
     void publishTelemetry(int rssi, int wifiSnr, size_t freeHeap,

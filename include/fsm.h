@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <cstdint>
 #include <deque>
 #include "config.h"
 
@@ -25,10 +26,10 @@ struct AudioFrame {
 struct FSMEvent {
     enum Type : uint8_t { NONE = 0, START = 1, END = 2 };
     Type type;
-    float timestamp_sec;           // Unix timestamp of this event
-    float probing_started_sec;     // Unix timestamp when PROBING was entered
-    float active_at_sec;           // Unix timestamp when ACTIVE was entered
-    float duration_sec;            // Valid only for END events
+    int64_t timestamp_sec;           // Unix epoch seconds of this event
+    int64_t probing_started_sec;     // Unix epoch seconds when PROBING was entered
+    int64_t active_at_sec;           // Unix epoch seconds when ACTIVE was entered
+    float duration_sec;              // Duration in seconds (valid only for END events)
 };
 
 // ── Runtime Config (mutable via MQTT) ───────────────────────────────────────
@@ -49,7 +50,7 @@ public:
     FSMEngine();
 
     /// Process one frame of audio, return an event if state transition occurs.
-    FSMEvent processFrame(const AudioFrame& frame, float unix_timestamp_sec);
+    FSMEvent processFrame(const AudioFrame& frame, int64_t unix_timestamp_sec);
 
     /// Reset to IDLE with all history cleared.
     void reset();
@@ -69,17 +70,17 @@ public:
 private:
     // State
     FSMState _state;
-    float _stateEnteredSec;
-    float _lastSignalSec;
-    float _eventStartedSec;
-    float _probingActiveSec;
+    int64_t _stateEnteredSec;
+    int64_t _lastSignalSec;
+    int64_t _eventStartedSec;
+    float _probingActiveSec;         // accumulates 0.1s frame windows
     bool  _signalPrev;
     int   _eventsToday;
     RuntimeConfig _config;
 
     // Probe timestamps for verbose event payloads
-    float _probingStartedSec;
-    float _activeAtSec;
+    int64_t _probingStartedSec;
+    int64_t _activeAtSec;
 
     // Ring buffer for pulse validation (12 seconds @ 0.1s frames)
     static constexpr size_t HISTORY_SIZE = 120;
@@ -92,7 +93,7 @@ private:
 
     // Internal methods
     bool _signalPulseIsValid(bool currentSignalPresent);
-    void _processStateMachine(float frameEndSec, float frameSec,
+    void _processStateMachine(int64_t frameEndSec, float frameSec,
                               bool signalPresent, bool pulseTrainOk,
                               float gapSec);
 };
