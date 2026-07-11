@@ -86,7 +86,7 @@ private:
     std::deque<uint8_t> _signalHistory;
 
     // Gap timeout debounce
-    static constexpr int SIGNAL_STREAK_MIN = 3;   // consecutive frames (~60ms) to reset gap timer
+    static constexpr int SIGNAL_STREAK_MIN = 2;   // consecutive frames (~40ms) to reset gap timer
     unsigned long _lastSignalMs;                   // millis() of last sustained signal
     int _signalStreak;                             // consecutive signal-present frames
 
