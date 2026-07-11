@@ -29,7 +29,7 @@ bool g_debugEnabled = false;
 // ── Setup ───────────────────────────────────────────────────────────────────
 
 void setup() {
-    Serial.begin(460800);
+    Serial.begin(921600);
     delay(500);
     Serial.println("\n\n===================================");
     Serial.println("Acoustic ATCS Proxy Node");
@@ -129,8 +129,10 @@ static void fsmTask(void* parameter) {
 
             // ── Periodic status line ────────────────────────────────────
             if (g_debugEnabled) {
-                static int statusCount = 0;
-                if (++statusCount % 50 == 0) {
+                static unsigned long lastStatusPrintMs = 0;
+                unsigned long nowMs = millis();
+                if (nowMs - lastStatusPrintMs >= DEBUG_PRINT_INTERVAL_MS) {
+                    lastStatusPrintMs = nowMs;
                     int st;
                     if (xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                         st = fsm.state();

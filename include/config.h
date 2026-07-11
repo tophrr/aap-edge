@@ -7,6 +7,7 @@ extern bool g_debugEnabled;
 #define DEBUG_PRINT(...) do { if (g_debugEnabled) Serial.print(__VA_ARGS__); } while (0)
 #define DEBUG_PRINTLN(...) do { if (g_debugEnabled) Serial.println(__VA_ARGS__); } while (0)
 #define DEBUG_PRINTF(...) do { if (g_debugEnabled) Serial.printf(__VA_ARGS__); } while (0)
+#define DEBUG_PRINT_INTERVAL_MS 1000u
 
 // Load credentials from secrets.h (gitignored — see secrets.h.example)
 // If missing, provides placeholder defaults so the build doesn't break.
@@ -56,8 +57,8 @@ extern bool g_debugEnabled;
 #define SEC_FREQ_HZ     662.0f
 #define AMB_FREQ_HZ     900.0f
 
-#define MAIN_SNR_DB     8.0f
-#define SEC_SNR_DB      4.0f
+#define MAIN_SNR_DB     25.0f
+#define SEC_SNR_DB      22.0f
 
 // ==========================================
 // FSM TIMING PARAMETERS (Seconds)

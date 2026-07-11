@@ -54,14 +54,20 @@ FSMEvent FSMEngine::processFrame(const AudioFrame& frame, float unix_timestamp_s
 
     bool pulse_train_ok = _signalPulseIsValid(signal_present);
 
-    // ── Verbose debug ─────────────────────────────────────────────────
+    // ── Verbose debug: limit serial output to avoid starving the task loop ─
     if (g_debugEnabled) {
         static int fsmFrame = 0;
+        static unsigned long lastFsmPrintMs = 0;
         fsmFrame++;
         {
             static const char* stateNames[] = {"IDLE", "PROBING", "ACTIVE"};
             const char* stName = _state <= 2 ? stateNames[_state] : "???";
-            if (fsmFrame <= 200 || fsmFrame % 5 == 0 || signal_present) {
+            unsigned long nowMs = millis();
+            bool shouldPrint = fsmFrame <= 20 ||
+                (nowMs - lastFsmPrintMs) >= DEBUG_PRINT_INTERVAL_MS ||
+                signal_present;
+            if (shouldPrint) {
+                lastFsmPrintMs = nowMs;
                 Serial.printf("[FSM] #%d | main_snr=%.1f sec_snr=%.1f | signal=%s pulse=%s | state=%s\n",
                     fsmFrame, (double)main_snr, (double)sec_snr,
                     signal_present ? "YES" : "no",

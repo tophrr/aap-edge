@@ -11,7 +11,7 @@ static i2s_config_t _i2sConfig = {
     .sample_rate = SAMPLE_RATE,
     .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
     .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
-    .communication_format = (i2s_comm_format_t)(I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
+    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S),
     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
     .dma_buf_count = 4,
     .dma_buf_len = 256,
@@ -137,9 +137,10 @@ void audioDspTask(void* parameter) {
         float sec_db  = goertzelDB(floatSamples, samplesRead, SEC_FREQ_HZ, SAMPLE_RATE);
         float amb_db  = goertzelDB(floatSamples, samplesRead, AMB_FREQ_HZ, SAMPLE_RATE);
 
-        // ── Verbose debug: print every frame for tuning ────────────────
+        // ── Verbose debug: keep prints bounded so they don't starve the DSP task ─
         if (g_debugEnabled) {
             static int dspFrame = 0;
+            static unsigned long lastDspPrintMs = 0;
             dspFrame++;
             float main_snr = main_db - amb_db;
             float sec_snr = sec_db - amb_db;
@@ -155,8 +156,12 @@ void audioDspTask(void* parameter) {
             }
             float rms = sqrtf(sumSq / samplesRead);
             float rms_db = 20.0f * log10f(rms + 1e-12f);
-            // Print every frame for first 200, then every 5, or anytime SNR > 0
-            if (dspFrame <= 200 || dspFrame % 5 == 0 || main_snr > 0 || sec_snr > 0) {
+            unsigned long nowMs = millis();
+            bool shouldPrint = dspFrame <= 20 ||
+                (nowMs - lastDspPrintMs) >= DEBUG_PRINT_INTERVAL_MS ||
+                main_snr > 0.0f || sec_snr > 0.0f;
+            if (shouldPrint) {
+                lastDspPrintMs = nowMs;
                 Serial.printf("[DSP] #%d | RMS=%.1fdB raw=[%d,%d] | main=%.1f sec=%.1f amb=%.1f | main_snr=%.1f sec_snr=%.1f\n",
                     dspFrame, (double)rms_db, rawMin, rawMax,
                     (double)main_db, (double)sec_db, (double)amb_db,
