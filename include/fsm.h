@@ -85,8 +85,14 @@ private:
     static constexpr size_t HISTORY_SIZE = 120;
     std::deque<uint8_t> _signalHistory;
 
+    // Gap timeout debounce
+    static constexpr int SIGNAL_STREAK_MIN = 3;   // consecutive frames (~60ms) to reset gap timer
+    unsigned long _lastSignalMs;                   // millis() of last sustained signal
+    int _signalStreak;                             // consecutive signal-present frames
+
     // Internal methods
     bool _signalPulseIsValid(bool currentSignalPresent);
     void _processStateMachine(float frameEndSec, float frameSec,
-                              bool signalPresent, bool pulseTrainOk);
+                              bool signalPresent, bool pulseTrainOk,
+                              float gapSec);
 };

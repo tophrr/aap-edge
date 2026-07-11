@@ -14,6 +14,8 @@ FSMEngine::FSMEngine()
     , _eventsToday(0)
     , _probingStartedSec(0.0f)
     , _activeAtSec(0.0f)
+    , _lastSignalMs(0)
+    , _signalStreak(0)
 {
 }
 
@@ -29,6 +31,8 @@ void FSMEngine::reset() {
     _eventsToday = 0;
     _probingStartedSec = 0.0f;
     _activeAtSec = 0.0f;
+    _lastSignalMs = 0;
+    _signalStreak = 0;
     _signalHistory.clear();
 }
 
@@ -77,10 +81,25 @@ FSMEvent FSMEngine::processFrame(const AudioFrame& frame, float unix_timestamp_s
         }
     }
 
+    // Compute gap using millis() with debounce:
+    // Require SIGNAL_STREAK_MIN consecutive signal-present frames
+    // before resetting the gap timer, preventing brief noise spikes
+    // from restarting the timeout.
+    unsigned long nowMs = millis();
+    if (signal_present) {
+        _signalStreak = min(_signalStreak + 1, SIGNAL_STREAK_MIN);
+    } else {
+        _signalStreak = 0;
+    }
+    if (_signalStreak >= SIGNAL_STREAK_MIN) {
+        _lastSignalMs = nowMs;
+    }
+    float gapSec = (nowMs - _lastSignalMs) / 1000.0f;
+
     // Save previous state to detect transitions
     FSMState prevState = _state;
 
-    _processStateMachine(unix_timestamp_sec, WINDOW_SEC, signal_present, pulse_train_ok);
+    _processStateMachine(unix_timestamp_sec, WINDOW_SEC, signal_present, pulse_train_ok, gapSec);
 
     // Build event based on transition
     FSMEvent event;
@@ -123,7 +142,8 @@ bool FSMEngine::_signalPulseIsValid(bool currentSignalPresent) {
 
 void FSMEngine::_processStateMachine(
     float frameEndSec, float frameSec,
-    bool signalPresent, bool pulseTrainOk
+    bool signalPresent, bool pulseTrainOk,
+    float gapSec
 ) {
     bool signalRisingEdge = signalPresent && !_signalPrev;
     _signalPrev = signalPresent;
@@ -142,12 +162,12 @@ void FSMEngine::_processStateMachine(
                 _stateEnteredSec = frameEndSec;
                 _probingStartedSec = frameEndSec;
                 _probingActiveSec = 0.0f;
+                _lastSignalMs = millis();
                 DEBUG_PRINTF("[FSM] IDLE \u2192 PROBING (rising edge @ %.1f)\n", (double)frameEndSec);
             }
             break;
 
         case FSM_PROBING: {
-            float gapSec = frameEndSec - _lastSignalSec;
             if (!signalPresent && gapSec > _config.probing_timeout_sec) {
                 _state = FSM_IDLE;
                 DEBUG_PRINTF("[FSM] PROBING \u2192 IDLE (gap %.1fs > %.1fs)\n",
@@ -163,6 +183,7 @@ void FSMEngine::_processStateMachine(
                 _stateEnteredSec = frameEndSec;
                 _activeAtSec = frameEndSec;
                 _eventStartedSec = frameEndSec;
+                _lastSignalMs = millis();
                 ++_eventsToday;
                 DEBUG_PRINTF("[FSM] PROBING \u2192 ACTIVE (pulse confirmed @ %.1fs)\n",
                     (double)_probingActiveSec);
@@ -171,7 +192,6 @@ void FSMEngine::_processStateMachine(
         }
 
         case FSM_ACTIVE: {
-            float gapSec = frameEndSec - _lastSignalSec;
             if (gapSec > _config.active_timeout_sec) {
                 _state = FSM_IDLE;
                 DEBUG_PRINTF("[FSM] ACTIVE \u2192 IDLE (gap %.1fs > %.1fs)\n",
