@@ -28,6 +28,39 @@ static SemaphoreHandle_t fsmMutex = nullptr;
 
 bool g_debugEnabled = false;
 
+// ── LED State Indicator ─────────────────────────────────────────────────────
+
+/// Update the status LED based on FSM state.
+/// off=IDLE, blinking=PROBING, solid on=ACTIVE.
+static void updateStatusLED(int currentState) {
+    static int lastState = -1;
+    static unsigned long lastToggleMs = 0;
+
+    if (currentState == lastState && currentState != FSM_PROBING) {
+        return;  // No change needed for stable non-blinking states
+    }
+    lastState = currentState;
+
+    switch (currentState) {
+        case FSM_IDLE:
+            digitalWrite(STATUS_LED_PIN, LOW);
+            break;
+        case FSM_PROBING: {
+            unsigned long nowMs = millis();
+            if (nowMs - lastToggleMs >= LED_BLINK_MS) {
+                lastToggleMs = nowMs;
+                digitalWrite(STATUS_LED_PIN, !digitalRead(STATUS_LED_PIN));
+            }
+            break;
+        }
+        case FSM_ACTIVE:
+            digitalWrite(STATUS_LED_PIN, HIGH);
+            break;
+        default:
+            break;
+    }
+}
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 
 void setup() {
@@ -36,6 +69,10 @@ void setup() {
     Serial.println("\n\n===================================");
     Serial.println("Acoustic ATCS Proxy Node");
     Serial.println("===================================");
+
+    // Initialize status LED
+    pinMode(STATUS_LED_PIN, OUTPUT);
+    digitalWrite(STATUS_LED_PIN, LOW);
 
     // Initialize I2S microphone
     initI2S();
@@ -155,6 +192,18 @@ static void fsmTask(void* parameter) {
                         (double)frame.main_db, (double)frame.sec_db, (double)frame.amb_db,
                         ESP.getFreeHeap(), WiFi.RSSI());
                 }
+            }
+
+            // Update status LED based on FSM state
+            {
+                int st;
+                if (xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                    st = fsm.state();
+                    xSemaphoreGive(fsmMutex);
+                } else {
+                    st = -1;
+                }
+                updateStatusLED(st);
             }
 
             // Periodic heartbeat

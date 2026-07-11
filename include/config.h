@@ -46,6 +46,9 @@ extern bool g_debugEnabled;
 #define I2S_SCK_PIN     19
 #define I2S_SD_PIN      18
 
+#define STATUS_LED_PIN  2       // GPIO2 — built-in LED: off=idle, blink=probing, on=active
+#define LED_BLINK_MS    250     // Blink interval for PROBING state
+
 // ==========================================
 // DSP & AUDIO PARAMETERS
 // ==========================================
