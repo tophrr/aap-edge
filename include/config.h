@@ -63,6 +63,9 @@ extern bool g_debugEnabled;
 #define MAIN_SNR_DB     25.0f
 #define SEC_SNR_DB      22.0f
 
+#define ALPHA_ATTACK    0.01f
+#define ALPHA_DECAY     0.20f
+
 // ==========================================
 // FSM TIMING PARAMETERS (Seconds)
 // ==========================================
