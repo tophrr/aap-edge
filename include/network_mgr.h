@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include "config.h"
 
 class NetworkMgr {
 public:
@@ -19,6 +20,7 @@ public:
     void publishTelemetry(int rssi, int wifiSnr, size_t freeHeap,
                           size_t minHeap, unsigned long uptimeSec,
                           int state, int eventsToday, int mqttReconnects);
+    void publishConfigAck(const RuntimeConfig& cfg);
 
     // Status
     bool connected();
@@ -30,6 +32,9 @@ public:
     // Config callback
     using ConfigCallback = void (*)(const char* jsonPayload);
     void onConfig(ConfigCallback cb) { _configCb = cb; }
+
+    using ConfigRequestCallback = void (*)();
+    void onConfigRequest(ConfigRequestCallback cb) { _configRequestCb = cb; }
 
     // Static MQTT callback dispatcher
     static void staticMqttCallback(char* topic, byte* payload, unsigned int length);
@@ -57,6 +62,7 @@ private:
 
     // Config callback
     ConfigCallback _configCb;
+    ConfigRequestCallback _configRequestCb;
 
     // Internal methods
     void _connectWiFi();

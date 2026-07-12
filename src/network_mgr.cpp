@@ -1,6 +1,7 @@
 #include "network_mgr.h"
 #include "config.h"
 #include <esp_wpa2.h>
+#include <ArduinoJson.h>
 
 // ── Constructor ─────────────────────────────────────────────────────────────
 
@@ -17,9 +18,10 @@ NetworkMgr::NetworkMgr()
     , _lastHeartbeatSec(0)
     , _lastTelemetrySec(0)
     , _configCb(nullptr)
+    , _configRequestCb(nullptr)
 {
     _mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-    _mqttClient.setBufferSize(512);
+    _mqttClient.setBufferSize(1024); // Increase size to handle config JSON
     _instance = this;
 }
 
@@ -191,6 +193,11 @@ void NetworkMgr::_connectMQTT() {
         _mqttClient.subscribe(MQTT_TOPIC_CONFIG);
         Serial.print("[MQTT] Subscribed to ");
         Serial.println(MQTT_TOPIC_CONFIG);
+
+        // Subscribe to config request topic
+        _mqttClient.subscribe(MQTT_TOPIC_CONFIG_REQ);
+        Serial.print("[MQTT] Subscribed to ");
+        Serial.println(MQTT_TOPIC_CONFIG_REQ);
     } else {
         Serial.print("[MQTT] Failed (rc=");
         Serial.print(_mqttClient.state());
@@ -203,15 +210,54 @@ void NetworkMgr::_connectMQTT() {
 
 void NetworkMgr::_mqttCallback(char* topic, byte* payload, unsigned int length) {
     // Null-terminate the payload
-    char buf[512];
+    char buf[1024];
     unsigned int copyLen = min(length, (unsigned int)sizeof(buf) - 1);
     memcpy(buf, payload, copyLen);
     buf[copyLen] = '\0';
 
-    Serial.print("[MQTT] Config received: ");
-    Serial.println(buf);
+    Serial.print("[MQTT] Message received on topic: ");
+    Serial.println(topic);
 
-    if (_configCb) {
-        _configCb(buf);
+    if (strcmp(topic, MQTT_TOPIC_CONFIG_REQ) == 0) {
+        if (_configRequestCb) {
+            _configRequestCb();
+        }
+    } else if (strcmp(topic, MQTT_TOPIC_CONFIG) == 0) {
+        if (_configCb) {
+            _configCb(buf);
+        }
     }
+}
+
+void NetworkMgr::publishConfigAck(const RuntimeConfig& cfg) {
+    JsonDocument doc;
+    doc["main_snr_db"] = cfg.main_snr_threshold;
+    doc["sec_snr_db"] = cfg.sec_snr_threshold;
+    doc["confirm_sec"] = cfg.confirm_sec;
+    doc["probing_timeout_sec"] = cfg.probing_timeout_sec;
+    doc["active_timeout_sec"] = cfg.active_timeout_sec;
+    doc["pulse_on_sec"] = cfg.pulse_on_sec;
+    doc["pulse_off_sec"] = cfg.pulse_off_sec;
+    doc["pulse_tolerance_sec"] = cfg.pulse_tolerance_sec;
+    doc["cycle_target_ms"] = cfg.cycle_target_ms;
+    doc["cycle_tolerance_ms"] = cfg.cycle_tolerance_ms;
+    doc["required_cycles"] = cfg.required_cycles;
+    doc["signal_streak_min"] = cfg.signal_streak_min;
+    doc["main_freq_hz"] = cfg.main_freq_hz;
+    doc["sec_freq_hz"] = cfg.sec_freq_hz;
+    doc["amb_freq_hz"] = cfg.amb_freq_hz;
+    doc["alpha_attack"] = cfg.alpha_attack;
+    doc["alpha_decay"] = cfg.alpha_decay;
+    doc["deep_sleep_enabled"] = cfg.deep_sleep_enabled;
+    doc["sleep_start_hour"] = cfg.sleep_start_hour;
+    doc["wake_end_hour"] = cfg.wake_end_hour;
+    doc["led_enabled"] = cfg.led_enabled;
+    doc["ota_enabled"] = cfg.ota_enabled;
+    doc["ota_port"] = cfg.ota_port;
+    doc["debug_enabled"] = cfg.debug_enabled;
+
+    char buf[1024];
+    serializeJson(doc, buf, sizeof(buf));
+    publish(MQTT_TOPIC_CONFIG_ACK, buf);
+    Serial.println("[MQTT] Published config acknowledgement");
 }

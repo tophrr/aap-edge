@@ -133,9 +133,9 @@ void audioDspTask(void* parameter) {
         applyHann(floatSamples, samplesRead);
 
         // Compute Goertzel magnitudes
-        float main_db = goertzelDB(floatSamples, samplesRead, MAIN_FREQ_HZ, SAMPLE_RATE);
-        float sec_db  = goertzelDB(floatSamples, samplesRead, SEC_FREQ_HZ, SAMPLE_RATE);
-        float amb_db  = goertzelDB(floatSamples, samplesRead, AMB_FREQ_HZ, SAMPLE_RATE);
+        float main_db = goertzelDB(floatSamples, samplesRead, g_config.main_freq_hz, SAMPLE_RATE);
+        float sec_db  = goertzelDB(floatSamples, samplesRead, g_config.sec_freq_hz, SAMPLE_RATE);
+        float amb_db  = goertzelDB(floatSamples, samplesRead, g_config.amb_freq_hz, SAMPLE_RATE);
 
         // Apply asymmetric Exponential Moving Average (EMA) for ambient noise baseline
         static float smoothed_amb_db = 0.0f;
@@ -146,10 +146,10 @@ void audioDspTask(void* parameter) {
         } else {
             if (amb_db > smoothed_amb_db) {
                 // Environment is getting louder -> slow reaction (attack)
-                smoothed_amb_db += ALPHA_ATTACK * (amb_db - smoothed_amb_db);
+                smoothed_amb_db += g_config.alpha_attack * (amb_db - smoothed_amb_db);
             } else {
                 // Environment is getting quieter -> fast reaction (decay)
-                smoothed_amb_db += ALPHA_DECAY * (amb_db - smoothed_amb_db);
+                smoothed_amb_db += g_config.alpha_decay * (amb_db - smoothed_amb_db);
             }
         }
 

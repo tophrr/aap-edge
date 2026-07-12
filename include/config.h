@@ -34,6 +34,8 @@ extern bool g_debugEnabled;
 #define MQTT_TOPIC_HEARTBEAT        "crossing/heartbeat"
 #define MQTT_TOPIC_TELEMETRY        "crossing/telemetry"
 #define MQTT_TOPIC_CONFIG           "crossing/config"
+#define MQTT_TOPIC_CONFIG_ACK       "crossing/config/ack"
+#define MQTT_TOPIC_CONFIG_REQ       "crossing/config/req"
 
 #define HEARTBEAT_INTERVAL_SEC      60
 #define TELEMETRY_INTERVAL_SEC      300
@@ -93,3 +95,61 @@ extern bool g_debugEnabled;
 // FREERTOS
 // ==========================================
 #define AUDIO_QUEUE_SIZE    10
+
+// ==========================================
+// RUNTIME CONFIGURATION & STATE
+// ==========================================
+enum FSMState : uint8_t {
+    FSM_IDLE = 0,
+    FSM_PROBING = 1,
+    FSM_ACTIVE = 2
+};
+
+struct RuntimeConfig {
+    // FSM Timing Parameters
+    float main_snr_threshold = MAIN_SNR_DB;
+    float sec_snr_threshold = SEC_SNR_DB;
+    float confirm_sec = CONFIRM_SEC;
+    float probing_timeout_sec = PROBING_TIMEOUT_SEC;
+    float active_timeout_sec = ACTIVE_TIMEOUT_SEC;
+    float pulse_on_sec = PULSE_ON_SEC;
+    float pulse_off_sec = PULSE_OFF_SEC;
+    float pulse_tolerance_sec = PULSE_TOLERANCE_SEC;
+
+    // Pulse validation parameters
+    unsigned long cycle_target_ms = 1200;
+    unsigned long cycle_tolerance_ms = 300;
+    int required_cycles = 2;
+    int signal_streak_min = 2;
+
+    // DSP Parameters
+    float main_freq_hz = MAIN_FREQ_HZ;
+    float sec_freq_hz = SEC_FREQ_HZ;
+    float amb_freq_hz = AMB_FREQ_HZ;
+    float alpha_attack = ALPHA_ATTACK;
+    float alpha_decay = ALPHA_DECAY;
+
+    // Deep Sleep Parameters
+    bool deep_sleep_enabled = DEEP_SLEEP_ENABLED;
+    int sleep_start_hour = SLEEP_START_HOUR;
+    int wake_end_hour = WAKE_END_HOUR;
+
+    // LED Toggle / Status
+    bool led_enabled = true;
+
+    // OTA Parameters
+    bool ota_enabled = OTA_ENABLED;
+    int ota_port = OTA_PORT;
+
+    // Debug
+    bool debug_enabled = false;
+};
+
+struct PulseValidationState {
+    unsigned long lastRisingEdgeMs = 0;
+    int validCycleCount = 0;
+    unsigned long lastSignalMs = 0;
+    int signalStreak = 0;
+};
+
+extern RuntimeConfig g_config;

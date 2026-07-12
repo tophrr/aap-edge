@@ -14,10 +14,7 @@ FSMEngine::FSMEngine()
     , _eventsToday(0)
     , _probingStartedSec(0)
     , _activeAtSec(0)
-    , _lastRisingEdgeMs(0)
-    , _validCycleCount(0)
-    , _lastSignalMs(0)
-    , _signalStreak(0)
+    , _pulseValState()
 {
 }
 
@@ -33,10 +30,7 @@ void FSMEngine::reset() {
     _eventsToday = 0;
     _probingStartedSec = 0;
     _activeAtSec = 0;
-    _lastRisingEdgeMs = 0;
-    _validCycleCount = 0;
-    _lastSignalMs = 0;
-    _signalStreak = 0;
+    _pulseValState = PulseValidationState();
 }
 
 void FSMEngine::applyConfig(const RuntimeConfig& cfg) {
@@ -59,35 +53,35 @@ FSMEvent FSMEngine::processFrame(const AudioFrame& frame, int64_t unix_timestamp
     // from restarting the timeout.
     unsigned long nowMs = millis();
     if (signal_present) {
-        _signalStreak = min(_signalStreak + 1, SIGNAL_STREAK_MIN);
+        _pulseValState.signalStreak = min(_pulseValState.signalStreak + 1, _config.signal_streak_min);
     } else {
-        _signalStreak = 0;
+        _pulseValState.signalStreak = 0;
     }
-    if (_signalStreak >= SIGNAL_STREAK_MIN) {
-        _lastSignalMs = nowMs;
+    if (_pulseValState.signalStreak >= _config.signal_streak_min) {
+        _pulseValState.lastSignalMs = nowMs;
     }
-    float gapSec = (nowMs - _lastSignalMs) / 1000.0f;
+    float gapSec = (nowMs - _pulseValState.lastSignalMs) / 1000.0f;
 
-    bool debouncedSignal = (_signalStreak >= SIGNAL_STREAK_MIN);
+    bool debouncedSignal = (_pulseValState.signalStreak >= _config.signal_streak_min);
     bool signalRisingEdge = debouncedSignal && !_signalPrev;
     _signalPrev = debouncedSignal;
 
     if (signalRisingEdge) {
-        if (_lastRisingEdgeMs == 0) {
-            _validCycleCount = 0;
+        if (_pulseValState.lastRisingEdgeMs == 0) {
+            _pulseValState.validCycleCount = 0;
             DEBUG_PRINTF("[FSM] First rising edge @ %lu ms\n", nowMs);
         } else {
-            unsigned long deltaMs = nowMs - _lastRisingEdgeMs;
-            if (deltaMs >= (CYCLE_TARGET_MS - CYCLE_TOLERANCE_MS) &&
-                deltaMs <= (CYCLE_TARGET_MS + CYCLE_TOLERANCE_MS)) {
-                _validCycleCount++;
-                DEBUG_PRINTF("[FSM] Valid cycle: deltaMs=%lu ms (count=%d)\n", deltaMs, _validCycleCount);
+            unsigned long deltaMs = nowMs - _pulseValState.lastRisingEdgeMs;
+            if (deltaMs >= (_config.cycle_target_ms - _config.cycle_tolerance_ms) &&
+                deltaMs <= (_config.cycle_target_ms + _config.cycle_tolerance_ms)) {
+                _pulseValState.validCycleCount++;
+                DEBUG_PRINTF("[FSM] Valid cycle: deltaMs=%lu ms (count=%d)\n", deltaMs, _pulseValState.validCycleCount);
             } else {
-                _validCycleCount = 0;
+                _pulseValState.validCycleCount = 0;
                 DEBUG_PRINTF("[FSM] Invalid cycle: deltaMs=%lu ms (resetting count)\n", deltaMs);
             }
         }
-        _lastRisingEdgeMs = nowMs;
+        _pulseValState.lastRisingEdgeMs = nowMs;
     }
 
     // ── Verbose debug: limit serial output to avoid starving the task loop ─
@@ -106,7 +100,7 @@ FSMEvent FSMEngine::processFrame(const AudioFrame& frame, int64_t unix_timestamp
                 Serial.printf("[FSM] #%d | main_snr=%.1f sec_snr=%.1f | signal=%s cycles=%d | state=%s\n",
                     fsmFrame, (double)main_snr, (double)sec_snr,
                     signal_present ? "YES" : "no",
-                    _validCycleCount,
+                    _pulseValState.validCycleCount,
                     stName);
             }
         }
@@ -156,7 +150,7 @@ void FSMEngine::_processStateMachine(
                 _stateEnteredSec = frameEndSec;
                 _probingStartedSec = frameEndSec;
                 _probingActiveSec = 0.0f;
-                _lastSignalMs = millis();
+                _pulseValState.lastSignalMs = millis();
                 DEBUG_PRINTF("[FSM] IDLE \u2192 PROBING (rising edge @ %lld)\n", (long long)frameEndSec);
             }
             break;
@@ -164,22 +158,22 @@ void FSMEngine::_processStateMachine(
         case FSM_PROBING: {
             if (!signalPresent && gapSec > _config.probing_timeout_sec) {
                 _state = FSM_IDLE;
-                _validCycleCount = 0;
-                _lastRisingEdgeMs = 0;
+                _pulseValState.validCycleCount = 0;
+                _pulseValState.lastRisingEdgeMs = 0;
                 DEBUG_PRINTF("[FSM] PROBING \u2192 IDLE (gap %.1fs > %.1fs)\n",
                     (double)gapSec, (double)_config.probing_timeout_sec);
             } else if (_probingActiveSec > _config.probing_timeout_sec) {
                 _state = FSM_IDLE;
-                _validCycleCount = 0;
-                _lastRisingEdgeMs = 0;
+                _pulseValState.validCycleCount = 0;
+                _pulseValState.lastRisingEdgeMs = 0;
                 DEBUG_PRINTF("[FSM] PROBING \u2192 IDLE (no pulse after %.1fs)\n",
                     (double)_probingActiveSec);
-            } else if (_validCycleCount >= REQUIRED_CYCLES) {
+            } else if (_pulseValState.validCycleCount >= _config.required_cycles) {
                 _state = FSM_ACTIVE;
                 _stateEnteredSec = frameEndSec;
                 _activeAtSec = frameEndSec;
                 _eventStartedSec = frameEndSec;
-                _lastSignalMs = millis();
+                _pulseValState.lastSignalMs = millis();
                 ++_eventsToday;
                 DEBUG_PRINTF("[FSM] PROBING \u2192 ACTIVE (pulse confirmed @ %.1fs)\n",
                     (double)_probingActiveSec);
@@ -190,8 +184,8 @@ void FSMEngine::_processStateMachine(
         case FSM_ACTIVE: {
             if (gapSec > _config.active_timeout_sec) {
                 _state = FSM_IDLE;
-                _validCycleCount = 0;
-                _lastRisingEdgeMs = 0;
+                _pulseValState.validCycleCount = 0;
+                _pulseValState.lastRisingEdgeMs = 0;
                 DEBUG_PRINTF("[FSM] ACTIVE \u2192 IDLE (gap %.1fs > %.1fs)\n",
                     (double)gapSec, (double)_config.active_timeout_sec);
             }

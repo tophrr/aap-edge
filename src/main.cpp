@@ -15,6 +15,7 @@ extern void audioDspTask(void* parameter);
 
 static void fsmTask(void* parameter);
 static void configCallback(const char* json);
+static void configRequestCallback();
 static void checkDeepSleep(time_t now);
 static void syncNTP();
 static void initOTA();
@@ -27,6 +28,7 @@ static FSMEngine fsm;
 static SemaphoreHandle_t fsmMutex = nullptr;
 
 bool g_debugEnabled = false;
+RuntimeConfig g_config;
 
 // ── LED State Indicator ─────────────────────────────────────────────────────
 
@@ -35,6 +37,12 @@ bool g_debugEnabled = false;
 static void updateStatusLED(int currentState) {
     static int lastState = -1;
     static unsigned long lastToggleMs = 0;
+
+    if (!g_config.led_enabled) {
+        digitalWrite(STATUS_LED_PIN, LOW);
+        lastState = -1;
+        return;
+    }
 
     if (currentState == lastState && currentState != FSM_PROBING) {
         return;  // No change needed for stable non-blinking states
@@ -80,6 +88,7 @@ void setup() {
     // Start Wi-Fi + MQTT (async)
     networkMgr.begin();
     networkMgr.onConfig(configCallback);
+    networkMgr.onConfigRequest(configRequestCallback);
 
     // NTP sync will complete during first few seconds of runtime
     syncNTP();
@@ -147,7 +156,9 @@ static void fsmTask(void* parameter) {
             networkMgr.loop();
 
             // Handle OTA updates
-            ArduinoOTA.handle();
+            if (g_config.ota_enabled) {
+                ArduinoOTA.handle();
+            }
 
             // Process frame through FSM (protected by mutex for config safety)
             FSMEvent event;
@@ -234,7 +245,7 @@ static void fsmTask(void* parameter) {
             }
 
             // Check deep sleep
-            if (now > 100000 && DEEP_SLEEP_ENABLED) {
+            if (now > 100000 && g_config.deep_sleep_enabled) {
                 checkDeepSleep(now);
             }
         }
@@ -253,31 +264,85 @@ static void configCallback(const char* json) {
         return;
     }
 
-    RuntimeConfig cfg = fsm.getConfig();
-
-    if (doc["main_snr_db"].is<float>())          cfg.main_snr_threshold = doc["main_snr_db"];
-    if (doc["sec_snr_db"].is<float>())           cfg.sec_snr_threshold = doc["sec_snr_db"];
-    if (doc["confirm_sec"].is<float>())          cfg.confirm_sec = doc["confirm_sec"];
-    if (doc["probing_timeout_sec"].is<float>())  cfg.probing_timeout_sec = doc["probing_timeout_sec"];
-    if (doc["active_timeout_sec"].is<float>())   cfg.active_timeout_sec = doc["active_timeout_sec"];
-    if (doc["debug_enabled"].is<bool>()) {
-        g_debugEnabled = doc["debug_enabled"].as<bool>();
-    } else if (doc["debug"].is<bool>()) {
-        g_debugEnabled = doc["debug"].as<bool>();
-    }
-    cfg.debug_enabled = g_debugEnabled;
-
     if (fsmMutex != nullptr && xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        fsm.applyConfig(cfg);
+        // FSM Timing Parameters
+        if (doc["main_snr_db"].is<float>())          g_config.main_snr_threshold = doc["main_snr_db"];
+        if (doc["sec_snr_db"].is<float>())           g_config.sec_snr_threshold = doc["sec_snr_db"];
+        if (doc["confirm_sec"].is<float>())          g_config.confirm_sec = doc["confirm_sec"];
+        if (doc["probing_timeout_sec"].is<float>())  g_config.probing_timeout_sec = doc["probing_timeout_sec"];
+        if (doc["active_timeout_sec"].is<float>())   g_config.active_timeout_sec = doc["active_timeout_sec"];
+        if (doc["pulse_on_sec"].is<float>())         g_config.pulse_on_sec = doc["pulse_on_sec"];
+        if (doc["pulse_off_sec"].is<float>())        g_config.pulse_off_sec = doc["pulse_off_sec"];
+        if (doc["pulse_tolerance_sec"].is<float>())  g_config.pulse_tolerance_sec = doc["pulse_tolerance_sec"];
+
+        // Pulse validation parameters
+        if (doc["cycle_target_ms"].is<unsigned long>()) g_config.cycle_target_ms = doc["cycle_target_ms"];
+        if (doc["cycle_tolerance_ms"].is<unsigned long>()) g_config.cycle_tolerance_ms = doc["cycle_tolerance_ms"];
+        if (doc["required_cycles"].is<int>())        g_config.required_cycles = doc["required_cycles"];
+        if (doc["signal_streak_min"].is<int>())      g_config.signal_streak_min = doc["signal_streak_min"];
+
+        // DSP Parameters
+        if (doc["main_freq_hz"].is<float>())         g_config.main_freq_hz = doc["main_freq_hz"];
+        if (doc["sec_freq_hz"].is<float>())          g_config.sec_freq_hz = doc["sec_freq_hz"];
+        if (doc["amb_freq_hz"].is<float>())          g_config.amb_freq_hz = doc["amb_freq_hz"];
+        if (doc["alpha_attack"].is<float>())         g_config.alpha_attack = doc["alpha_attack"];
+        if (doc["alpha_decay"].is<float>())          g_config.alpha_decay = doc["alpha_decay"];
+
+        // Deep Sleep Parameters
+        if (doc["deep_sleep_enabled"].is<bool>())    g_config.deep_sleep_enabled = doc["deep_sleep_enabled"];
+        if (doc["sleep_start_hour"].is<int>())       g_config.sleep_start_hour = doc["sleep_start_hour"];
+        if (doc["wake_end_hour"].is<int>())          g_config.wake_end_hour = doc["wake_end_hour"];
+
+        // LED status
+        if (doc["led_enabled"].is<bool>())           g_config.led_enabled = doc["led_enabled"];
+
+        // OTA Parameters
+        if (doc["ota_port"].is<int>()) {
+            int newPort = doc["ota_port"];
+            if (newPort != g_config.ota_port) {
+                g_config.ota_port = newPort;
+                if (g_config.ota_enabled) {
+                    Serial.printf("[Config] Restarting OTA on port %d\n", g_config.ota_port);
+                    ArduinoOTA.end();
+                    ArduinoOTA.setPort(g_config.ota_port);
+                    ArduinoOTA.begin();
+                }
+            }
+        }
+        if (doc["ota_enabled"].is<bool>()) {
+            bool otaWasEnabled = g_config.ota_enabled;
+            g_config.ota_enabled = doc["ota_enabled"];
+            if (g_config.ota_enabled && !otaWasEnabled) {
+                Serial.println("[Config] Enabling OTA");
+                ArduinoOTA.setPort(g_config.ota_port);
+                ArduinoOTA.begin();
+            } else if (!g_config.ota_enabled && otaWasEnabled) {
+                Serial.println("[Config] Disabling OTA");
+                ArduinoOTA.end();
+            }
+        }
+
+        // Debug
+        if (doc["debug_enabled"].is<bool>()) {
+            g_debugEnabled = doc["debug_enabled"].as<bool>();
+        } else if (doc["debug"].is<bool>()) {
+            g_debugEnabled = doc["debug"].as<bool>();
+        }
+        g_config.debug_enabled = g_debugEnabled;
+
+        fsm.applyConfig(g_config);
         xSemaphoreGive(fsmMutex);
     }
 
-    Serial.println("[Config] Applied new configuration:");
-    Serial.printf("  main_snr_db=%.1f, sec_snr_db=%.1f\n",
-        (double)cfg.main_snr_threshold, (double)cfg.sec_snr_threshold);
-    Serial.printf("  confirm_sec=%.1f, probing_timeout=%.1f, active_timeout=%.1f\n",
-        (double)cfg.confirm_sec, (double)cfg.probing_timeout_sec, (double)cfg.active_timeout_sec);
-    Serial.printf("  debug_enabled=%s\n", g_debugEnabled ? "true" : "false");
+    Serial.println("[Config] Applied new configuration.");
+    networkMgr.publishConfigAck(g_config);
+}
+
+static void configRequestCallback() {
+    if (fsmMutex != nullptr && xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        networkMgr.publishConfigAck(g_config);
+        xSemaphoreGive(fsmMutex);
+    }
 }
 
 // ── NTP Sync ───────────────────────────────────────────────────────────────
@@ -291,24 +356,24 @@ static void syncNTP() {
 // ── Deep Sleep ──────────────────────────────────────────────────────────────
 
 static void checkDeepSleep(time_t now) {
-    if (!DEEP_SLEEP_ENABLED) return;
+    if (!g_config.deep_sleep_enabled) return;
 
     struct tm* timeinfo = localtime(&now);
     int hour = timeinfo->tm_hour;
 
-    // Outside operating hours (05:00–22:00)
-    if (hour >= SLEEP_START_HOUR || hour < WAKE_END_HOUR) {
+    // Outside operating hours
+    if (hour >= g_config.sleep_start_hour || hour < g_config.wake_end_hour) {
         Serial.printf("[Sleep] Hour %d — entering deep sleep\n", hour);
 
-        // Calculate seconds until next wake time (05:00)
+        // Calculate seconds until next wake time
         time_t wakeTime = now;
         struct tm wakeTm = *timeinfo;
-        wakeTm.tm_hour = WAKE_END_HOUR;
+        wakeTm.tm_hour = g_config.wake_end_hour;
         wakeTm.tm_min = 0;
         wakeTm.tm_sec = 0;
 
         wakeTime = mktime(&wakeTm);
-        if (hour >= SLEEP_START_HOUR) {
+        if (hour >= g_config.sleep_start_hour) {
             // Wake up tomorrow
             wakeTime += 86400;
         }
@@ -329,7 +394,7 @@ static void initOTA() {
     hostname += String((uint32_t)(ESP.getEfuseMac() & 0xFFFFFF), HEX);
 
     ArduinoOTA.setHostname(hostname.c_str());
-    ArduinoOTA.setPort(OTA_PORT);
+    ArduinoOTA.setPort(g_config.ota_port);
 
     ArduinoOTA.onStart([]() {
         String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
@@ -353,6 +418,10 @@ static void initOTA() {
         else if (error == OTA_END_ERROR)    Serial.println("End Failed");
     });
 
-    ArduinoOTA.begin();
-    Serial.printf("[OTA] Ready on port %d (hostname: %s)\n", OTA_PORT, hostname.c_str());
+    if (g_config.ota_enabled) {
+        ArduinoOTA.begin();
+        Serial.printf("[OTA] Ready on port %d (hostname: %s)\n", g_config.ota_port, hostname.c_str());
+    } else {
+        Serial.println("[OTA] Disabled by config");
+    }
 } 

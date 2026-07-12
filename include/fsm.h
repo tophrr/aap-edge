@@ -5,14 +5,6 @@
 #include <deque>
 #include "config.h"
 
-// ── FSM State ───────────────────────────────────────────────────────────────
-
-enum FSMState : uint8_t {
-    FSM_IDLE = 0,
-    FSM_PROBING = 1,
-    FSM_ACTIVE = 2
-};
-
 // ── Audio Frame (IPC from Core 0 → Core 1) ─────────────────────────────────
 
 struct AudioFrame {
@@ -30,17 +22,6 @@ struct FSMEvent {
     int64_t probing_started_sec;     // Unix epoch seconds when PROBING was entered
     int64_t active_at_sec;           // Unix epoch seconds when ACTIVE was entered
     float duration_sec;              // Duration in seconds (valid only for END events)
-};
-
-// ── Runtime Config (mutable via MQTT) ───────────────────────────────────────
-
-struct RuntimeConfig {
-    float main_snr_threshold = MAIN_SNR_DB;
-    float sec_snr_threshold = SEC_SNR_DB;
-    float confirm_sec = CONFIRM_SEC;
-    float probing_timeout_sec = PROBING_TIMEOUT_SEC;
-    float active_timeout_sec = ACTIVE_TIMEOUT_SEC;
-    bool debug_enabled = false;
 };
 
 // ── FSM Engine ──────────────────────────────────────────────────────────────
@@ -83,16 +64,7 @@ private:
     int64_t _activeAtSec;
 
     // Pulse validation parameters and state
-    static constexpr unsigned long CYCLE_TARGET_MS = 1200;
-    static constexpr unsigned long CYCLE_TOLERANCE_MS = 300;
-    static constexpr int REQUIRED_CYCLES = 2;
-    unsigned long _lastRisingEdgeMs;
-    int _validCycleCount;
-
-    // Gap timeout debounce
-    static constexpr int SIGNAL_STREAK_MIN = 2;   // consecutive frames (~40ms) to reset gap timer
-    unsigned long _lastSignalMs;                   // millis() of last sustained signal
-    int _signalStreak;                             // consecutive signal-present frames
+    PulseValidationState _pulseValState;
 
     // Internal methods
     void _processStateMachine(int64_t frameEndSec, float frameSec,
