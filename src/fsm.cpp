@@ -123,7 +123,7 @@ FSMEvent FSMEngine::processFrame(const AudioFrame& frame, int64_t unix_timestamp
         event.type = FSMEvent::START;
     } else if (prevState == FSM_ACTIVE && _state == FSM_IDLE) {
         event.type = FSMEvent::END;
-        event.duration_sec = _lastSignalSec - _eventStartedSec;
+        event.duration_sec = _lastSignalSec - _probingStartedSec;
     }
 
     return event;
