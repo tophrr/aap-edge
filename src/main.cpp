@@ -75,7 +75,7 @@ static void updateStatusLED(int currentState) {
 // ── Setup ───────────────────────────────────────────────────────────────────
 
 void setup() {
-    Serial.begin(921600);
+    Serial.begin(460800);
     delay(500);
     Serial.println("\n\n===================================");
     Serial.println("Acoustic ATCS Proxy Node");
