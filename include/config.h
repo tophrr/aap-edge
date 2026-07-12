@@ -98,6 +98,12 @@ extern bool g_debugEnabled;
 // FREERTOS
 // ==========================================
 #define AUDIO_QUEUE_SIZE    10
+#define UDP_CHUNK_SIZE      400
+#define UDP_QUEUE_SIZE      8
+
+struct AudioUdpPacket {
+    int16_t samples[UDP_CHUNK_SIZE];
+};
 
 // ==========================================
 // RUNTIME CONFIGURATION & STATE
@@ -143,6 +149,11 @@ struct RuntimeConfig {
     // OTA Parameters
     bool ota_enabled = OTA_ENABLED;
     int ota_port = OTA_PORT;
+
+    // UDP Audio Streaming
+    bool udp_stream_enabled = false;
+    char udp_host[64] = "";
+    uint16_t udp_port = 5001;
 
     // Debug
     bool debug_enabled = false;

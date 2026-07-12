@@ -10,16 +10,20 @@
 #include "ota.h"
 #include "sleep.h"
 
+#include <WiFiUdp.h>
+
 // ── Forward declarations ────────────────────────────────────────────────────
 
 extern void initI2S();
 extern void audioDspTask(void* parameter);
 
 static void fsmTask(void* parameter);
+static void audioUdpTask(void* parameter);
 
 // ── Globals ─────────────────────────────────────────────────────────────────
 
 static QueueHandle_t audioQueue = nullptr;
+QueueHandle_t udpQueue = nullptr;
 
 // Non-static so config_handler.cpp can reference them via extern
 NetworkMgr       networkMgr;
@@ -72,6 +76,26 @@ static void updateStatusLED(int currentState) {
     }
 }
 
+// ── Audio UDP Task (Core 1) ─────────────────────────────────────────────────
+
+static void audioUdpTask(void* parameter) {
+    Log.println("[AudioUDP] Task started on Core 1");
+    WiFiUDP udpClient;
+    AudioUdpPacket packet;
+
+    while (true) {
+        if (xQueueReceive(udpQueue, &packet, portMAX_DELAY) == pdPASS) {
+            // Only send if UDP stream is enabled and host is configured
+            if (g_config.udp_stream_enabled && strlen(g_config.udp_host) > 0) {
+                if (udpClient.beginPacket(g_config.udp_host, g_config.udp_port)) {
+                    udpClient.write((const uint8_t*)packet.samples, sizeof(packet.samples));
+                    udpClient.endPacket();
+                }
+            }
+        }
+    }
+}
+
 // ── Setup ───────────────────────────────────────────────────────────────────
 
 void setup() {
@@ -111,6 +135,13 @@ void setup() {
         abort();
     }
 
+    // Create UDP queue for audio chunks (Core 0 to Core 1)
+    udpQueue = xQueueCreate(UDP_QUEUE_SIZE, sizeof(AudioUdpPacket));
+    if (udpQueue == nullptr) {
+        Log.println("[FATAL] Failed to create UDP audio queue");
+        abort();
+    }
+
     fsmMutex = xSemaphoreCreateMutex();
 
     // Create tasks pinned to cores
@@ -134,6 +165,17 @@ void setup() {
         1,
         &fsmTaskHandle,     // task handle (for stack watermark telemetry)
         1  // core (APP_CPU)
+    );
+
+    // Create low-priority UDP sending task on Core 1 (APP_CPU)
+    xTaskCreatePinnedToCore(
+        audioUdpTask,       // task function
+        "audioUdp",         // name
+        4096,               // stack size
+        nullptr,            // parameters
+        1,                  // priority (low priority, same as FSM task)
+        nullptr,            // task handle
+        1                   // core (APP_CPU / Core 1)
     );
 
     // Expose handles to NetworkMgr so it can report stack HWMs in telemetry

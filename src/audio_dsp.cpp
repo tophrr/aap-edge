@@ -4,6 +4,8 @@
 #include <driver/i2s.h>
 #include <math.h>
 
+extern QueueHandle_t udpQueue;
+
 // ── I2S Initialization ──────────────────────────────────────────────────────
 
 static i2s_config_t _i2sConfig = {
@@ -182,6 +184,28 @@ void audioDspTask(void* parameter) {
                     dspFrame, (double)rms_db, rawMin, rawMax,
                     (double)main_db, (double)sec_db, (double)smoothed_amb_db, (double)amb_db,
                     (double)main_snr, (double)sec_snr);
+            }
+        }
+
+        // Send to UDP task if streaming is enabled
+        if (g_config.udp_stream_enabled) {
+            for (int chunk = 0; chunk < 4; ++chunk) {
+                AudioUdpPacket packet;
+                int startIdx = chunk * UDP_CHUNK_SIZE;
+                for (int i = 0; i < UDP_CHUNK_SIZE; ++i) {
+                    // Downsample raw 32-bit I2S to 16-bit PCM by shifting right 16 bits arithmetically
+                    packet.samples[i] = (int16_t)(rawSamples[startIdx + i] >> 16);
+                }
+
+                // Non-blocking send (wait 0 ticks). Drop packet if queue is full to preserve real-time safety.
+                if (xQueueSend(udpQueue, &packet, 0) != pdPASS) {
+                    static unsigned long lastDropWarn = 0;
+                    unsigned long nowMs = millis();
+                    if (nowMs - lastDropWarn > 5000) {
+                        lastDropWarn = nowMs;
+                        Log.println("[AudioDSP] UDP audio queue full, dropping packet(s)");
+                    }
+                }
             }
         }
 

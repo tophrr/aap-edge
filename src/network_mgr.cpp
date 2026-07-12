@@ -413,6 +413,9 @@ void NetworkMgr::publishConfigAck(const RuntimeConfig& cfg) {
     doc["ota_port"]             = cfg.ota_port;
     doc["debug_enabled"]        = cfg.debug_enabled;
     doc["mqtt_logs_enabled"]    = cfg.mqtt_logs_enabled;
+    doc["udp_stream_enabled"]   = cfg.udp_stream_enabled;
+    doc["udp_host"]             = cfg.udp_host;
+    doc["udp_port"]             = cfg.udp_port;
 
     char buf[1024];
     serializeJson(doc, buf, sizeof(buf));
