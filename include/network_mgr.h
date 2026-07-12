@@ -17,9 +17,10 @@ public:
                       int64_t probingStarted, int64_t activeAt,
                       float duration = 0.0f);
     void publishHeartbeat(unsigned long uptimeSec);
-    void publishTelemetry(int rssi, int wifiSnr, size_t freeHeap,
-                          size_t minHeap, unsigned long uptimeSec,
-                          int state, int eventsToday, int mqttReconnects);
+
+    /// Publish device-health telemetry snapshot.
+    void publishTelemetry(unsigned long uptimeSec, int state, int eventsToday);
+
     void publishConfigAck(const RuntimeConfig& cfg);
 
     // Status
@@ -28,6 +29,10 @@ public:
     unsigned long lastHeartbeatSec() const { return _lastHeartbeatSec; }
     unsigned long lastTelemetrySec() const { return _lastTelemetrySec; }
     int mqttReconnects() const { return _mqttReconnects; }
+
+    // FreeRTOS task handles — set by main.cpp after task creation
+    TaskHandle_t taskHandleFsm    = nullptr;
+    TaskHandle_t taskHandleAudio  = nullptr;
 
     // Config callback
     using ConfigCallback = void (*)(const char* jsonPayload);
@@ -49,12 +54,23 @@ private:
     // Wi-Fi state
     bool _wifiConnecting;
     unsigned long _wifiReconnectMs;
+    bool _wifiWasConnected;         // tracks previous Wi-Fi state for disconnect detection
+
+    // Wi-Fi counters
+    int _wifiDisconnects;           // number of times Wi-Fi dropped after being connected
+    int _wifiFaults;                // number of connection-attempt timeouts
 
     // MQTT state
     bool _mqttConnecting;
     unsigned long _mqttReconnectMs;
     unsigned long _mqttBackoffMs;
     int _mqttReconnects;
+
+    // MQTT RTT
+    bool          _rttPending;          // waiting for echo
+    unsigned long _rttSentMs;           // millis() when ping was sent
+    int           _rttLastMs;           // latest measured RTT in ms (-1 = unknown)
+    unsigned long _rttNextPingMs;       // when to send the next ping
 
     // Timers
     unsigned long _lastHeartbeatSec;
@@ -68,4 +84,5 @@ private:
     void _connectWiFi();
     void _connectMQTT();
     void _mqttCallback(char* topic, byte* payload, unsigned int length);
+    void _pingRtt();
 };
