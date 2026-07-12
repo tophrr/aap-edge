@@ -82,9 +82,12 @@ private:
     int64_t _probingStartedSec;
     int64_t _activeAtSec;
 
-    // Ring buffer for pulse validation (12 seconds @ 0.1s frames)
-    static constexpr size_t HISTORY_SIZE = 120;
-    std::deque<uint8_t> _signalHistory;
+    // Pulse validation parameters and state
+    static constexpr unsigned long CYCLE_TARGET_MS = 1200;
+    static constexpr unsigned long CYCLE_TOLERANCE_MS = 300;
+    static constexpr int REQUIRED_CYCLES = 2;
+    unsigned long _lastRisingEdgeMs;
+    int _validCycleCount;
 
     // Gap timeout debounce
     static constexpr int SIGNAL_STREAK_MIN = 2;   // consecutive frames (~40ms) to reset gap timer
@@ -92,8 +95,7 @@ private:
     int _signalStreak;                             // consecutive signal-present frames
 
     // Internal methods
-    bool _signalPulseIsValid(bool currentSignalPresent);
     void _processStateMachine(int64_t frameEndSec, float frameSec,
-                              bool signalPresent, bool pulseTrainOk,
+                              bool signalPresent, bool signalRisingEdge,
                               float gapSec);
 };
