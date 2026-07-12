@@ -4,6 +4,7 @@
 #include "network_mgr.h"
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
+#include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -23,6 +24,11 @@ void configCallback(const char* json) {
     if (error) {
         Serial.printf("[Config] JSON parse error: %s\n", error.c_str());
         return;
+    }
+
+    bool persist = false;
+    if (doc["persist"].is<bool>()) {
+        persist = doc["persist"].as<bool>();
     }
 
     if (fsmMutex != nullptr && xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -92,6 +98,11 @@ void configCallback(const char* json) {
         g_config.debug_enabled = g_debugEnabled;
 
         fsm.applyConfig(g_config);
+
+        if (persist) {
+            saveConfigToNVS(g_config);
+        }
+
         xSemaphoreGive(fsmMutex);
     }
 
@@ -104,4 +115,88 @@ void configRequestCallback() {
         networkMgr.publishConfigAck(g_config);
         xSemaphoreGive(fsmMutex);
     }
+}
+
+// ── NVS Persistence Helpers ──────────────────────────────────────────────────
+
+void loadConfigFromNVS(RuntimeConfig& cfg) {
+    Preferences prefs;
+    // Open in read-only mode (true)
+    if (!prefs.begin("rt_config", true)) {
+        Serial.println("[NVS] Namespace 'rt_config' not found. Using defaults.");
+        return;
+    }
+
+    cfg.main_snr_threshold   = prefs.getFloat("main_snr", cfg.main_snr_threshold);
+    cfg.sec_snr_threshold    = prefs.getFloat("sec_snr", cfg.sec_snr_threshold);
+    cfg.confirm_sec          = prefs.getFloat("confirm_sec", cfg.confirm_sec);
+    cfg.probing_timeout_sec  = prefs.getFloat("probing_timeout", cfg.probing_timeout_sec);
+    cfg.active_timeout_sec   = prefs.getFloat("active_timeout", cfg.active_timeout_sec);
+    cfg.pulse_on_sec         = prefs.getFloat("pulse_on_sec", cfg.pulse_on_sec);
+    cfg.pulse_off_sec        = prefs.getFloat("pulse_off_sec", cfg.pulse_off_sec);
+    cfg.pulse_tolerance_sec  = prefs.getFloat("pulse_tol", cfg.pulse_tolerance_sec);
+
+    cfg.cycle_target_ms      = prefs.getUInt("cycle_target", cfg.cycle_target_ms);
+    cfg.cycle_tolerance_ms   = prefs.getUInt("cycle_tol", cfg.cycle_tolerance_ms);
+    cfg.required_cycles      = prefs.getInt("req_cycles", cfg.required_cycles);
+    cfg.signal_streak_min    = prefs.getInt("sig_streak", cfg.signal_streak_min);
+
+    cfg.main_freq_hz         = prefs.getFloat("main_freq", cfg.main_freq_hz);
+    cfg.sec_freq_hz          = prefs.getFloat("sec_freq", cfg.sec_freq_hz);
+    cfg.amb_freq_hz          = prefs.getFloat("amb_freq", cfg.amb_freq_hz);
+    cfg.alpha_attack         = prefs.getFloat("alpha_attack", cfg.alpha_attack);
+    cfg.alpha_decay          = prefs.getFloat("alpha_decay", cfg.alpha_decay);
+
+    cfg.deep_sleep_enabled   = prefs.getBool("ds_enabled", cfg.deep_sleep_enabled);
+    cfg.sleep_start_hour     = prefs.getInt("sleep_start", cfg.sleep_start_hour);
+    cfg.wake_end_hour        = prefs.getInt("wake_end", cfg.wake_end_hour);
+
+    cfg.led_enabled          = prefs.getBool("led_enabled", cfg.led_enabled);
+    cfg.ota_enabled          = prefs.getBool("ota_enabled", cfg.ota_enabled);
+    cfg.ota_port             = prefs.getInt("ota_port", cfg.ota_port);
+    cfg.debug_enabled        = prefs.getBool("debug_enabled", cfg.debug_enabled);
+
+    prefs.end();
+    Serial.println("[NVS] Configuration successfully loaded from NVS.");
+}
+
+void saveConfigToNVS(const RuntimeConfig& cfg) {
+    Preferences prefs;
+    // Open in read-write mode (false)
+    if (!prefs.begin("rt_config", false)) {
+        Serial.println("[NVS] Error: Failed to open namespace 'rt_config' for writing.");
+        return;
+    }
+
+    prefs.putFloat("main_snr", cfg.main_snr_threshold);
+    prefs.putFloat("sec_snr", cfg.sec_snr_threshold);
+    prefs.putFloat("confirm_sec", cfg.confirm_sec);
+    prefs.putFloat("probing_timeout", cfg.probing_timeout_sec);
+    prefs.putFloat("active_timeout", cfg.active_timeout_sec);
+    prefs.putFloat("pulse_on_sec", cfg.pulse_on_sec);
+    prefs.putFloat("pulse_off_sec", cfg.pulse_off_sec);
+    prefs.putFloat("pulse_tol", cfg.pulse_tolerance_sec);
+
+    prefs.putUInt("cycle_target", cfg.cycle_target_ms);
+    prefs.putUInt("cycle_tol", cfg.cycle_tolerance_ms);
+    prefs.putInt("req_cycles", cfg.required_cycles);
+    prefs.putInt("sig_streak", cfg.signal_streak_min);
+
+    prefs.putFloat("main_freq", cfg.main_freq_hz);
+    prefs.putFloat("sec_freq", cfg.sec_freq_hz);
+    prefs.putFloat("amb_freq", cfg.amb_freq_hz);
+    prefs.putFloat("alpha_attack", cfg.alpha_attack);
+    prefs.putFloat("alpha_decay", cfg.alpha_decay);
+
+    prefs.putBool("ds_enabled", cfg.deep_sleep_enabled);
+    prefs.putInt("sleep_start", cfg.sleep_start_hour);
+    prefs.putInt("wake_end", cfg.wake_end_hour);
+
+    prefs.putBool("led_enabled", cfg.led_enabled);
+    prefs.putBool("ota_enabled", cfg.ota_enabled);
+    prefs.putInt("ota_port", cfg.ota_port);
+    prefs.putBool("debug_enabled", cfg.debug_enabled);
+
+    prefs.end();
+    Serial.println("[NVS] Configuration successfully saved to NVS.");
 }

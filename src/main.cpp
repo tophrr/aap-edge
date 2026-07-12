@@ -81,6 +81,11 @@ void setup() {
     Serial.println("Acoustic ATCS Proxy Node");
     Serial.println("===================================");
 
+    // Load persisted configuration from NVS
+    loadConfigFromNVS(g_config);
+    g_debugEnabled = g_config.debug_enabled;
+    fsm.applyConfig(g_config);
+
     // Initialize status LED
     pinMode(STATUS_LED_PIN, OUTPUT);
     digitalWrite(STATUS_LED_PIN, LOW);
