@@ -46,6 +46,7 @@ The device samples audio at 16,000 Hz and processes it in 0.1-second, non-overla
 The ambient baseline tracks the dynamic noise floor (e.g., passing traffic, wind) using an Asymmetric Exponential Moving Average (EMA) to react quickly to noise spikes but decay slowly.
 
 Signal detection requires the Signal-to-Noise Ratio (SNR) for both target frequencies to exceed strict thresholds:
+
 $$ \text{SNR}_{main} = 10 \log_{10} \left( \frac{P*{main}}{P*{amb}} \right) \ge 25.0\text{ dB} $$
 $$ \text{SNR}_{sec} = 10 \log_{10} \left( \frac{P*{sec}}{P*{amb}} \right) \ge 22.0\text{ dB} $$
 
@@ -175,6 +176,14 @@ Designed for the ESP32 Development Board (e.g., `esp32doit-devkit-v1`), utilizin
 3. Build and upload using PlatformIO.
 4. Future updates can be pushed over-the-air (OTA) via port `3232`.
 
-## The Team
+## Team Members
 
-Chr
+- Christopher G.
+- Christian O.
+- Evan L.
+
+---
+
+Informatics, class of 2024
+Intelligent System Final Project
+**Universitas Pelita Harapan**
