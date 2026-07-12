@@ -77,9 +77,9 @@ static void updateStatusLED(int currentState) {
 void setup() {
     Serial.begin(460800);
     delay(500);
-    Serial.println("\n\n===================================");
-    Serial.println("Acoustic ATCS Proxy Node");
-    Serial.println("===================================");
+    Log.println("\n\n===================================");
+    Log.println("Acoustic ATCS Proxy Node");
+    Log.println("===================================");
 
     // Load persisted configuration from NVS
     loadConfigFromNVS(g_config);
@@ -107,7 +107,7 @@ void setup() {
     // Create audio queue (IPC between Core 0 and Core 1)
     audioQueue = xQueueCreate(AUDIO_QUEUE_SIZE, sizeof(AudioFrame));
     if (audioQueue == nullptr) {
-        Serial.println("[FATAL] Failed to create audio queue");
+        Log.println("[FATAL] Failed to create audio queue");
         abort();
     }
 
@@ -140,7 +140,7 @@ void setup() {
     networkMgr.taskHandleFsm   = fsmTaskHandle;
     networkMgr.taskHandleAudio = audioDspHandle;
 
-    Serial.println("[Main] Tasks created. Starting...");
+    Log.println("[Main] Tasks created. Starting...");
 }
 
 // ── Loop (unused — tasks handle everything) ─────────────────────────────────
@@ -156,7 +156,7 @@ static void fsmTask(void* parameter) {
     AudioFrame frame;
     unsigned long uptimeSec = 0;
 
-    Serial.println("[FSM] Task started on Core 1");
+    Log.println("[FSM] Task started on Core 1");
 
     while (true) {
         // Block until audio frame arrives
@@ -181,14 +181,14 @@ static void fsmTask(void* parameter) {
 
             // Publish event if state transition occurred
             if (event.type == FSMEvent::START) {
-                Serial.printf("[Event] START @ %lld (probing=%lld, active=%lld)\n",
+                Log.printf("[Event] START @ %lld (probing=%lld, active=%lld)\n",
                     (long long)event.timestamp_sec,
                     (long long)event.probing_started_sec,
                     (long long)event.active_at_sec);
                 networkMgr.publishEvent("started", event.timestamp_sec,
                     event.probing_started_sec, event.active_at_sec);
             } else if (event.type == FSMEvent::END) {
-                Serial.printf("[Event] END @ %lld (duration=%.1f)\n",
+                Log.printf("[Event] END @ %lld (duration=%.1f)\n",
                     (long long)event.timestamp_sec, (double)event.duration_sec);
                 networkMgr.publishEvent("ended", event.timestamp_sec,
                     event.probing_started_sec, event.active_at_sec,
@@ -210,7 +210,7 @@ static void fsmTask(void* parameter) {
                     }
                     static const char* stateNames[] = {"IDLE", "PROBING", "ACTIVE"};
                     const char* stName = (st >= 0 && st <= 2) ? stateNames[st] : "???";
-                    Serial.printf("[STATUS] FSM=%s | main=%.1f sec=%.1f amb=%.1f | heap=%u rssi=%d\n",
+                    Log.printf("[STATUS] FSM=%s | main=%.1f sec=%.1f amb=%.1f | heap=%u rssi=%d\n",
                         stName,
                         (double)frame.main_db, (double)frame.sec_db, (double)frame.amb_db,
                         ESP.getFreeHeap(), WiFi.RSSI());

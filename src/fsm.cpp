@@ -97,7 +97,7 @@ FSMEvent FSMEngine::processFrame(const AudioFrame& frame, int64_t unix_timestamp
                 signal_present;
             if (shouldPrint) {
                 lastFsmPrintMs = nowMs;
-                Serial.printf("[FSM] #%d | main_snr=%.1f sec_snr=%.1f | signal=%s cycles=%d | state=%s\n",
+                Log.printf("[FSM] #%d | main_snr=%.1f sec_snr=%.1f | signal=%s cycles=%d | state=%s\n",
                     fsmFrame, (double)main_snr, (double)sec_snr,
                     signal_present ? "YES" : "no",
                     _pulseValState.validCycleCount,

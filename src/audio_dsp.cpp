@@ -30,21 +30,21 @@ static i2s_pin_config_t _i2sPins = {
 void initI2S() {
     esp_err_t err = i2s_driver_install(I2S_PORT, &_i2sConfig, 0, NULL);
     if (err != ESP_OK) {
-        Serial.print("[I2S] Driver install failed: ");
-        Serial.println(err);
+        Log.print("[I2S] Driver install failed: ");
+        Log.println(err);
         abort();
     }
 
     err = i2s_set_pin(I2S_PORT, &_i2sPins);
     if (err != ESP_OK) {
-        Serial.print("[I2S] Pin config failed: ");
-        Serial.println(err);
+        Log.print("[I2S] Pin config failed: ");
+        Log.println(err);
         abort();
     }
 
     i2s_zero_dma_buffer(I2S_PORT);
 
-    Serial.println("[I2S] Initialized: " + String(SAMPLE_RATE) + " Hz, " + String(I2S_BITS_PER_SAMPLE_32BIT) + "-bit mono, INMP441");
+    Log.println("[I2S] Initialized: " + String(SAMPLE_RATE) + " Hz, " + String(I2S_BITS_PER_SAMPLE_32BIT) + "-bit mono, INMP441");
 }
 
 // ── Goertzel Algorithm ──────────────────────────────────────────────────────
@@ -88,15 +88,15 @@ void audioDspTask(void* parameter) {
     static float floatSamples[NUM_SAMPLES];
     size_t bytesRead = 0;
 
-    Serial.println("[AudioDSP] Task started on Core 0");
+    Log.println("[AudioDSP] Task started on Core 0");
 
     while (true) {
         // Read block of samples from I2S DMA
         esp_err_t err = i2s_read(I2S_PORT, rawSamples, sizeof(rawSamples),
                                   &bytesRead, portMAX_DELAY);
         if (err != ESP_OK) {
-            Serial.print("[AudioDSP] i2s_read error: ");
-            Serial.println(err);
+            Log.print("[AudioDSP] i2s_read error: ");
+            Log.println(err);
             continue;
         }
 
@@ -111,10 +111,10 @@ void audioDspTask(void* parameter) {
                 for (int i = 0; i < samplesRead; ++i) {
                     if (rawSamples[i] != 0) ++nonzero;
                 }
-                Serial.printf("[DSP] Raw samples (32-bit): %d total, %d non-zero, first 16: ",
+                Log.printf("[DSP] Raw samples (32-bit): %d total, %d non-zero, first 16: ",
                     samplesRead, nonzero);
                 for (int i = 0; i < min(16, samplesRead); ++i) {
-                    Serial.printf("0x%08X ", rawSamples[i]);
+                    Log.printf("0x%08X ", rawSamples[i]);
                 }
                 DEBUG_PRINTLN("");
                 rawDiagDone = true;
@@ -178,7 +178,7 @@ void audioDspTask(void* parameter) {
                 main_snr > 0.0f || sec_snr > 0.0f;
             if (shouldPrint) {
                 lastDspPrintMs = nowMs;
-                Serial.printf("[DSP] #%d | RMS=%.1fdB raw=[%d,%d] | main=%.1f sec=%.1f amb=%.1f (raw=%.1f) | main_snr=%.1f sec_snr=%.1f\n",
+                Log.printf("[DSP] #%d | RMS=%.1fdB raw=[%d,%d] | main=%.1f sec=%.1f amb=%.1f (raw=%.1f) | main_snr=%.1f sec_snr=%.1f\n",
                     dspFrame, (double)rms_db, rawMin, rawMax,
                     (double)main_db, (double)sec_db, (double)smoothed_amb_db, (double)amb_db,
                     (double)main_snr, (double)sec_snr);
@@ -191,7 +191,7 @@ void audioDspTask(void* parameter) {
             // Queue full — drop frame (non-critical)
             static int dropCount = 0;
             if (++dropCount % 100 == 0) {
-                Serial.printf("[AudioDSP] Dropped %d frames (queue full)\n", dropCount);
+                Log.printf("[AudioDSP] Dropped %d frames (queue full)\n", dropCount);
             }
         }
     }

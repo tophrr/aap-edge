@@ -7,7 +7,7 @@
 
 void syncNTP() {
     configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
-    Serial.println("[NTP] Syncing...");
+    Log.println("[NTP] Syncing...");
     // NTP sync happens asynchronously; check timeSynced() before using timestamps
 }
 
@@ -21,7 +21,7 @@ void checkDeepSleep(time_t now) {
 
     // Outside operating hours
     if (hour >= g_config.sleep_start_hour || hour < g_config.wake_end_hour) {
-        Serial.printf("[Sleep] Hour %d — entering deep sleep\n", hour);
+        Log.printf("[Sleep] Hour %d — entering deep sleep\n", hour);
 
         // Calculate seconds until next wake time
         struct tm wakeTm = *timeinfo;
@@ -37,7 +37,7 @@ void checkDeepSleep(time_t now) {
 
         uint64_t sleepUs = (uint64_t)(difftime(wakeTime, now) * 1000000ULL);
 
-        Serial.printf("[Sleep] Sleeping for %llu seconds\n",
+        Log.printf("[Sleep] Sleeping for %llu seconds\n",
                       (unsigned long long)(sleepUs / 1000000));
 
         esp_sleep_enable_timer_wakeup(sleepUs);

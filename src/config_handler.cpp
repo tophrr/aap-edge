@@ -22,7 +22,7 @@ void configCallback(const char* json) {
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, json);
     if (error) {
-        Serial.printf("[Config] JSON parse error: %s\n", error.c_str());
+        Log.printf("[Config] JSON parse error: %s\n", error.c_str());
         return;
     }
 
@@ -69,7 +69,7 @@ void configCallback(const char* json) {
             if (newPort != g_config.ota_port) {
                 g_config.ota_port = newPort;
                 if (g_config.ota_enabled) {
-                    Serial.printf("[Config] Restarting OTA on port %d\n", g_config.ota_port);
+                    Log.printf("[Config] Restarting OTA on port %d\n", g_config.ota_port);
                     ArduinoOTA.end();
                     ArduinoOTA.setPort(g_config.ota_port);
                     ArduinoOTA.begin();
@@ -80,11 +80,11 @@ void configCallback(const char* json) {
             bool otaWasEnabled = g_config.ota_enabled;
             g_config.ota_enabled = doc["ota_enabled"];
             if (g_config.ota_enabled && !otaWasEnabled) {
-                Serial.println("[Config] Enabling OTA");
+                Log.println("[Config] Enabling OTA");
                 ArduinoOTA.setPort(g_config.ota_port);
                 ArduinoOTA.begin();
             } else if (!g_config.ota_enabled && otaWasEnabled) {
-                Serial.println("[Config] Disabling OTA");
+                Log.println("[Config] Disabling OTA");
                 ArduinoOTA.end();
             }
         }
@@ -97,6 +97,10 @@ void configCallback(const char* json) {
         }
         g_config.debug_enabled = g_debugEnabled;
 
+        if (doc["mqtt_logs_enabled"].is<bool>()) {
+            g_config.mqtt_logs_enabled = doc["mqtt_logs_enabled"].as<bool>();
+        }
+
         fsm.applyConfig(g_config);
 
         if (persist) {
@@ -106,7 +110,7 @@ void configCallback(const char* json) {
         xSemaphoreGive(fsmMutex);
     }
 
-    Serial.println("[Config] Applied new configuration.");
+    Log.println("[Config] Applied new configuration.");
     networkMgr.publishConfigAck(g_config);
 }
 
@@ -123,7 +127,7 @@ void loadConfigFromNVS(RuntimeConfig& cfg) {
     Preferences prefs;
     // Open in read-only mode (true)
     if (!prefs.begin("rt_config", true)) {
-        Serial.println("[NVS] Namespace 'rt_config' not found. Using defaults.");
+        Log.println("[NVS] Namespace 'rt_config' not found. Using defaults.");
         return;
     }
 
@@ -155,16 +159,17 @@ void loadConfigFromNVS(RuntimeConfig& cfg) {
     cfg.ota_enabled          = prefs.getBool("ota_enabled", cfg.ota_enabled);
     cfg.ota_port             = prefs.getInt("ota_port", cfg.ota_port);
     cfg.debug_enabled        = prefs.getBool("debug_enabled", cfg.debug_enabled);
+    cfg.mqtt_logs_enabled    = prefs.getBool("mqtt_logs", cfg.mqtt_logs_enabled);
 
     prefs.end();
-    Serial.println("[NVS] Configuration successfully loaded from NVS.");
+    Log.println("[NVS] Configuration successfully loaded from NVS.");
 }
 
 void saveConfigToNVS(const RuntimeConfig& cfg) {
     Preferences prefs;
     // Open in read-write mode (false)
     if (!prefs.begin("rt_config", false)) {
-        Serial.println("[NVS] Error: Failed to open namespace 'rt_config' for writing.");
+        Log.println("[NVS] Error: Failed to open namespace 'rt_config' for writing.");
         return;
     }
 
@@ -196,7 +201,8 @@ void saveConfigToNVS(const RuntimeConfig& cfg) {
     prefs.putBool("ota_enabled", cfg.ota_enabled);
     prefs.putInt("ota_port", cfg.ota_port);
     prefs.putBool("debug_enabled", cfg.debug_enabled);
+    prefs.putBool("mqtt_logs", cfg.mqtt_logs_enabled);
 
     prefs.end();
-    Serial.println("[NVS] Configuration successfully saved to NVS.");
+    Log.println("[NVS] Configuration successfully saved to NVS.");
 }

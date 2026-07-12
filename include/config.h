@@ -1,12 +1,13 @@
 #pragma once
 
 #include <Arduino.h>
+#include "mqtt_logger.h"
 
 extern bool g_debugEnabled;
 
-#define DEBUG_PRINT(...) do { if (g_debugEnabled) Serial.print(__VA_ARGS__); } while (0)
-#define DEBUG_PRINTLN(...) do { if (g_debugEnabled) Serial.println(__VA_ARGS__); } while (0)
-#define DEBUG_PRINTF(...) do { if (g_debugEnabled) Serial.printf(__VA_ARGS__); } while (0)
+#define DEBUG_PRINT(...) do { if (g_debugEnabled) Log.print(__VA_ARGS__); } while (0)
+#define DEBUG_PRINTLN(...) do { if (g_debugEnabled) Log.println(__VA_ARGS__); } while (0)
+#define DEBUG_PRINTF(...) do { if (g_debugEnabled) Log.printf(__VA_ARGS__); } while (0)
 #define DEBUG_PRINT_INTERVAL_MS 1000u
 
 // Load credentials from secrets.h (gitignored — see secrets.h.example)
@@ -37,6 +38,7 @@ extern bool g_debugEnabled;
 #define MQTT_TOPIC_CONFIG_ACK       "crossing/config/ack"
 #define MQTT_TOPIC_CONFIG_REQ       "crossing/config/req"
 #define MQTT_TOPIC_RTT              "crossing/rtt"
+#define MQTT_TOPIC_LOG              "crossing/log"
 
 #define HEARTBEAT_INTERVAL_SEC      60
 #define TELEMETRY_INTERVAL_SEC      300
@@ -144,6 +146,7 @@ struct RuntimeConfig {
 
     // Debug
     bool debug_enabled = false;
+    bool mqtt_logs_enabled = false;
 };
 
 struct PulseValidationState {

@@ -1,5 +1,6 @@
 #include "network_mgr.h"
 #include "config.h"
+#include "mqtt_logger.h"
 #include <esp_wpa2.h>
 #include <esp_system.h>       // esp_reset_reason()
 #include <esp_chip_info.h>
@@ -54,7 +55,7 @@ void NetworkMgr::staticMqttCallback(char* topic, byte* payload, unsigned int len
 // ── Public API ──────────────────────────────────────────────────────────────
 
 void NetworkMgr::begin() {
-    Serial.println("[Network] Starting Wi-Fi...");
+    Log.println("[Network] Starting Wi-Fi...");
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(true, true);
     _connectWiFi();
@@ -64,13 +65,24 @@ void NetworkMgr::loop() {
     // Handle MQTT client loop
     if (_mqttClient.connected()) {
         _mqttClient.loop();
+
+        // Dequeue and publish logs to MQTT if enabled
+        if (g_config.mqtt_logs_enabled && g_logQueue != nullptr) {
+            LogMessage msg;
+            int sentCount = 0;
+            // Limit to 5 logs per loop invocation to prevent flooding/blocking
+            while (sentCount < 5 && xQueueReceive(g_logQueue, &msg, 0) == pdPASS) {
+                _mqttClient.publish(MQTT_TOPIC_LOG, msg.text);
+                sentCount++;
+            }
+        }
     }
 
     // ── Wi-Fi disconnect detection ──────────────────────────────────────
     bool wifiNow = (WiFi.status() == WL_CONNECTED);
     if (_wifiWasConnected && !wifiNow) {
         _wifiDisconnects++;
-        Serial.printf("[WiFi] Disconnected (total drops: %d)\n", _wifiDisconnects);
+        Log.printf("[WiFi] Disconnected (total drops: %d)\n", _wifiDisconnects);
     }
     _wifiWasConnected = wifiNow;
 
@@ -87,7 +99,7 @@ void NetworkMgr::loop() {
     if (_wifiConnecting && millis() - _wifiReconnectMs > 15000) {
         _wifiConnecting = false;
         _wifiFaults++;
-        Serial.printf("[WiFi] Connection timeout (total faults: %d)\n", _wifiFaults);
+        Log.printf("[WiFi] Connection timeout (total faults: %d)\n", _wifiFaults);
     }
 
     // Detect Wi-Fi connected and clear connecting flag
@@ -117,7 +129,7 @@ void NetworkMgr::loop() {
         if (_rttPending && nowMs - _rttSentMs > 5000) {
             _rttPending = false;
             _rttLastMs = -1;
-            Serial.println("[MQTT] RTT ping timed out");
+            Log.println("[MQTT] RTT ping timed out");
         }
         // Send a new ping every 30 s when not already waiting
         if (!_rttPending && nowMs >= _rttNextPingMs) {
@@ -254,7 +266,7 @@ void NetworkMgr::publishTelemetry(unsigned long uptimeSec, int state, int events
 
     if (publish(MQTT_TOPIC_TELEMETRY, buf)) {
         _lastTelemetrySec = uptimeSec;
-        Serial.printf("[Telemetry] Published (temp=%.1f°C, rtt=%dms, tasks=%u)\n",
+        Log.printf("[Telemetry] Published (temp=%.1f°C, rtt=%dms, tasks=%u)\n",
                       tempC, _rttLastMs, (unsigned)taskCount);
     }
 }
@@ -263,18 +275,18 @@ void NetworkMgr::publishTelemetry(unsigned long uptimeSec, int state, int events
 
 void NetworkMgr::_connectWiFi() {
     _wifiConnecting = true;
-    Serial.print("[WiFi] Connecting to ");
-    Serial.print(WIFI_SSID);
+    Log.print("[WiFi] Connecting to ");
+    Log.print(WIFI_SSID);
 
     if (strlen(WIFI_EAP_USERNAME) > 0) {
-        Serial.println(" (WPA2-Enterprise)");
+        Log.println(" (WPA2-Enterprise)");
         esp_wifi_sta_wpa2_ent_set_identity((unsigned char*)WIFI_EAP_IDENTITY, strlen(WIFI_EAP_IDENTITY));
         esp_wifi_sta_wpa2_ent_set_username((unsigned char*)WIFI_EAP_USERNAME, strlen(WIFI_EAP_USERNAME));
         esp_wifi_sta_wpa2_ent_set_password((unsigned char*)WIFI_EAP_PASSWORD, strlen(WIFI_EAP_PASSWORD));
         esp_wifi_sta_wpa2_ent_enable();
         WiFi.begin(WIFI_SSID);
     } else {
-        Serial.println(" (WPA2-PSK)");
+        Log.println(" (WPA2-PSK)");
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     }
 }
@@ -285,10 +297,10 @@ void NetworkMgr::_connectMQTT() {
     _mqttConnecting = true;
     _mqttReconnectMs = millis();
 
-    Serial.print("[MQTT] Connecting to ");
-    Serial.print(MQTT_SERVER);
-    Serial.print(":");
-    Serial.println(MQTT_PORT);
+    Log.print("[MQTT] Connecting to ");
+    Log.print(MQTT_SERVER);
+    Log.print(":");
+    Log.println(MQTT_PORT);
 
     // Set the callback before connecting
     _mqttClient.setCallback(staticMqttCallback);
@@ -298,18 +310,18 @@ void NetworkMgr::_connectMQTT() {
     snprintf(clientId, sizeof(clientId), "aap_%08X", (unsigned int)ESP.getEfuseMac());
 
     if (_mqttClient.connect(clientId)) {
-        Serial.println("[MQTT] Connected");
+        Log.println("[MQTT] Connected");
         _mqttConnecting = false;
         _mqttBackoffMs = 1000;
 
         _mqttClient.subscribe(MQTT_TOPIC_CONFIG);
-        Serial.print("[MQTT] Subscribed to "); Serial.println(MQTT_TOPIC_CONFIG);
+        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_CONFIG);
 
         _mqttClient.subscribe(MQTT_TOPIC_CONFIG_REQ);
-        Serial.print("[MQTT] Subscribed to "); Serial.println(MQTT_TOPIC_CONFIG_REQ);
+        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_CONFIG_REQ);
 
         _mqttClient.subscribe(MQTT_TOPIC_RTT);
-        Serial.print("[MQTT] Subscribed to "); Serial.println(MQTT_TOPIC_RTT);
+        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_RTT);
 
         // Backdate timers so heartbeat + telemetry fire immediately after connect
         unsigned long uptimeSec = millis() / 1000;
@@ -319,9 +331,9 @@ void NetworkMgr::_connectMQTT() {
         // Kick off first RTT ping after 5 s
         _rttNextPingMs = millis() + 5000;
     } else {
-        Serial.print("[MQTT] Failed (rc=");
-        Serial.print(_mqttClient.state());
-        Serial.println(")");
+        Log.print("[MQTT] Failed (rc=");
+        Log.print(_mqttClient.state());
+        Log.println(")");
         _mqttConnecting = false;
         _mqttBackoffMs = min(_mqttBackoffMs * 2, 30000UL);
         ++_mqttReconnects;
@@ -349,8 +361,8 @@ void NetworkMgr::_mqttCallback(char* topic, byte* payload, unsigned int length) 
     memcpy(buf, payload, copyLen);
     buf[copyLen] = '\0';
 
-    Serial.print("[MQTT] Message received on topic: ");
-    Serial.println(topic);
+    Log.print("[MQTT] Message received on topic: ");
+    Log.println(topic);
 
     if (strcmp(topic, MQTT_TOPIC_RTT) == 0) {
         // Echo back: payload is the millisecond timestamp we sent
@@ -359,7 +371,7 @@ void NetworkMgr::_mqttCallback(char* topic, byte* payload, unsigned int length) 
             unsigned long nowMs  = millis();
             if (nowMs >= sentMs) {
                 _rttLastMs = (int)(nowMs - sentMs);
-                Serial.printf("[MQTT] RTT = %d ms\n", _rttLastMs);
+                Log.printf("[MQTT] RTT = %d ms\n", _rttLastMs);
             }
             _rttPending = false;
         }
@@ -400,9 +412,10 @@ void NetworkMgr::publishConfigAck(const RuntimeConfig& cfg) {
     doc["ota_enabled"]          = cfg.ota_enabled;
     doc["ota_port"]             = cfg.ota_port;
     doc["debug_enabled"]        = cfg.debug_enabled;
+    doc["mqtt_logs_enabled"]    = cfg.mqtt_logs_enabled;
 
     char buf[1024];
     serializeJson(doc, buf, sizeof(buf));
     publish(MQTT_TOPIC_CONFIG_ACK, buf);
-    Serial.println("[MQTT] Published config acknowledgement");
+    Log.println("[MQTT] Published config acknowledgement");
 }
