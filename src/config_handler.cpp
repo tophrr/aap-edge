@@ -132,6 +132,18 @@ void configRequestCallback() {
     }
 }
 
+void telemetryRequestCallback() {
+    unsigned long uptimeSec = millis() / 1000;
+    int state = -1;
+    int eventsToday = -1;
+    if (fsmMutex != nullptr && xSemaphoreTake(fsmMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        state = fsm.state();
+        eventsToday = fsm.eventsToday();
+        xSemaphoreGive(fsmMutex);
+    }
+    networkMgr.publishTelemetry(uptimeSec, state, eventsToday);
+}
+
 // ── NVS Persistence Helpers ──────────────────────────────────────────────────
 
 void loadConfigFromNVS(RuntimeConfig& cfg) {

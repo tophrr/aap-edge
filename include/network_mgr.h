@@ -41,6 +41,9 @@ public:
     using ConfigRequestCallback = void (*)();
     void onConfigRequest(ConfigRequestCallback cb) { _configRequestCb = cb; }
 
+    using TelemetryRequestCallback = void (*)();
+    void onTelemetryRequest(TelemetryRequestCallback cb) { _telemetryRequestCb = cb; }
+
     // Static MQTT callback dispatcher
     static void staticMqttCallback(char* topic, byte* payload, unsigned int length);
 
@@ -79,6 +82,7 @@ private:
     // Config callback
     ConfigCallback _configCb;
     ConfigRequestCallback _configRequestCb;
+    TelemetryRequestCallback _telemetryRequestCb;
 
     // Internal methods
     void _connectWiFi();

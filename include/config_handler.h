@@ -6,6 +6,7 @@ struct RuntimeConfig;
 /// Registered with NetworkMgr::onConfig() / onConfigRequest() in setup().
 void configCallback(const char* json);
 void configRequestCallback();
+void telemetryRequestCallback();
 
 /// NVS Persistence Helpers
 void loadConfigFromNVS(RuntimeConfig& cfg);

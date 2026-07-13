@@ -121,6 +121,7 @@ void setup() {
     networkMgr.begin();
     networkMgr.onConfig(configCallback);
     networkMgr.onConfigRequest(configRequestCallback);
+    networkMgr.onTelemetryRequest(telemetryRequestCallback);
 
     // NTP sync will complete during first few seconds of runtime
     syncNTP();

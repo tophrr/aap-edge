@@ -41,6 +41,8 @@ extern bool g_debugEnabled;
 #define MQTT_TOPIC_CONFIG_REQ       "crossing/config/req"
 #define MQTT_TOPIC_RTT              "crossing/rtt"
 #define MQTT_TOPIC_LOG              "crossing/log"
+#define MQTT_TOPIC_RESTART          "crossing/restart"
+#define MQTT_TOPIC_TELEMETRY_REQ    "crossing/telemetry/req"
 
 #define HEARTBEAT_INTERVAL_SEC      60
 #define TELEMETRY_INTERVAL_SEC      300

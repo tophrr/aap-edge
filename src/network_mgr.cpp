@@ -39,6 +39,7 @@ NetworkMgr::NetworkMgr()
     , _lastTelemetrySec(0)
     , _configCb(nullptr)
     , _configRequestCb(nullptr)
+    , _telemetryRequestCb(nullptr)
 {
     _mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
     _mqttClient.setBufferSize(1024);
@@ -336,6 +337,12 @@ void NetworkMgr::_connectMQTT() {
         _mqttClient.subscribe(MQTT_TOPIC_RTT);
         Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_RTT);
 
+        _mqttClient.subscribe(MQTT_TOPIC_RESTART);
+        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_RESTART);
+
+        _mqttClient.subscribe(MQTT_TOPIC_TELEMETRY_REQ);
+        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_TELEMETRY_REQ);
+
         // Backdate timers so heartbeat + telemetry fire immediately after connect
         unsigned long uptimeSec = millis() / 1000;
         _lastHeartbeatSec = (uptimeSec >= HEARTBEAT_INTERVAL_SEC) ? uptimeSec - HEARTBEAT_INTERVAL_SEC : 0;
@@ -395,6 +402,14 @@ void NetworkMgr::_mqttCallback(char* topic, byte* payload, unsigned int length) 
     } else if (strcmp(topic, MQTT_TOPIC_CONFIG) == 0) {
         if (_configCb) {
             _configCb(buf);
+        }
+    } else if (strcmp(topic, MQTT_TOPIC_RESTART) == 0) {
+        Log.println("[MQTT] Restart command received. Rebooting ESP32...");
+        delay(500);
+        ESP.restart();
+    } else if (strcmp(topic, MQTT_TOPIC_TELEMETRY_REQ) == 0) {
+        if (_telemetryRequestCb) {
+            _telemetryRequestCb();
         }
     }
 }
