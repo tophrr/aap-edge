@@ -88,7 +88,7 @@ static void audioUdpTask(void* parameter) {
             // Only send if UDP stream is enabled and host is configured
             if (g_config.udp_stream_enabled && strlen(g_config.udp_host) > 0) {
                 if (udpClient.beginPacket(g_config.udp_host, g_config.udp_port)) {
-                    udpClient.write((const uint8_t*)packet.samples, sizeof(packet.samples));
+                    udpClient.write((const uint8_t*)&packet, sizeof(packet));
                     udpClient.endPacket();
                 }
             }

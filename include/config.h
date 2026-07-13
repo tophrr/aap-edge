@@ -101,9 +101,11 @@ extern bool g_debugEnabled;
 // ==========================================
 #define AUDIO_QUEUE_SIZE    10
 #define UDP_CHUNK_SIZE      400
-#define UDP_QUEUE_SIZE      8
+#define UDP_QUEUE_SIZE      16
 
 struct AudioUdpPacket {
+    uint32_t sequence;
+    uint32_t timestamp_ms;
     int16_t samples[UDP_CHUNK_SIZE];
 };
 

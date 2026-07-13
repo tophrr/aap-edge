@@ -189,8 +189,12 @@ void audioDspTask(void* parameter) {
 
         // Send to UDP task if streaming is enabled
         if (g_config.udp_stream_enabled) {
+            static uint32_t udpSeq = 0;
+            uint32_t nowMs = millis();
             for (int chunk = 0; chunk < 4; ++chunk) {
                 AudioUdpPacket packet;
+                packet.sequence = udpSeq++;
+                packet.timestamp_ms = nowMs + (chunk * 25);
                 int startIdx = chunk * UDP_CHUNK_SIZE;
                 for (int i = 0; i < UDP_CHUNK_SIZE; ++i) {
                     // Downsample raw 32-bit I2S to 16-bit PCM by shifting right 16 bits arithmetically
