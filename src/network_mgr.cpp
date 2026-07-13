@@ -2,6 +2,7 @@
 #include "config.h"
 #include "mqtt_logger.h"
 #include <esp_wpa2.h>
+#include <esp_wifi.h>
 #include <esp_system.h>       // esp_reset_reason()
 #include <esp_chip_info.h>
 #include <ArduinoJson.h>
@@ -57,7 +58,15 @@ void NetworkMgr::staticMqttCallback(char* topic, byte* payload, unsigned int len
 void NetworkMgr::begin() {
     Log.println("[Network] Starting Wi-Fi...");
     WiFi.mode(WIFI_STA);
-    WiFi.disconnect(true, true);
+    
+    // Set country code to ID (Indonesia) to support channels 12 & 13
+    wifi_country_t country;
+    memcpy(country.cc, "ID", 3);
+    country.schan = 1;
+    country.nchan = 13;
+    country.policy = WIFI_COUNTRY_POLICY_AUTO;
+    esp_wifi_set_country(&country);
+
     _connectWiFi();
 }
 
@@ -277,16 +286,15 @@ void NetworkMgr::_connectWiFi() {
     _wifiConnecting = true;
     Log.print("[WiFi] Connecting to ");
     Log.print(WIFI_SSID);
+    
+    WiFi.disconnect(true);
 
     if (strlen(WIFI_EAP_USERNAME) > 0) {
         Log.println(" (WPA2-Enterprise)");
-        esp_wifi_sta_wpa2_ent_set_identity((unsigned char*)WIFI_EAP_IDENTITY, strlen(WIFI_EAP_IDENTITY));
-        esp_wifi_sta_wpa2_ent_set_username((unsigned char*)WIFI_EAP_USERNAME, strlen(WIFI_EAP_USERNAME));
-        esp_wifi_sta_wpa2_ent_set_password((unsigned char*)WIFI_EAP_PASSWORD, strlen(WIFI_EAP_PASSWORD));
-        esp_wifi_sta_wpa2_ent_enable();
-        WiFi.begin(WIFI_SSID);
+        WiFi.begin(WIFI_SSID, WIFI_EAP_METHOD, WIFI_EAP_IDENTITY, WIFI_EAP_USERNAME, WIFI_EAP_PASSWORD);
     } else {
         Log.println(" (WPA2-PSK)");
+        esp_wifi_sta_wpa2_ent_disable(); // Ensure enterprise mode is off
         WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     }
 }
