@@ -309,7 +309,12 @@ void NetworkMgr::_connectMQTT() {
     char clientId[24];
     snprintf(clientId, sizeof(clientId), "aap_%08X", (unsigned int)ESP.getEfuseMac());
 
-    if (_mqttClient.connect(clientId)) {
+    bool hasMqttCredentials = strlen(MQTT_USERNAME) > 0;
+    bool connected = hasMqttCredentials
+        ? _mqttClient.connect(clientId, MQTT_USERNAME, MQTT_PASSWORD)
+        : _mqttClient.connect(clientId);
+
+    if (connected) {
         Log.println("[MQTT] Connected");
         _mqttConnecting = false;
         _mqttBackoffMs = 1000;

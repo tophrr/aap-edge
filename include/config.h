@@ -26,6 +26,8 @@ extern bool g_debugEnabled;
     #define WIFI_EAP_PASSWORD   ""
     #define MQTT_SERVER         "CHANGE_ME"
     #define MQTT_PORT           1883
+    #define MQTT_USERNAME       ""
+    #define MQTT_PASSWORD       ""
 #endif
 
 // ==========================================
