@@ -43,6 +43,7 @@ extern bool g_debugEnabled;
 #define MQTT_TOPIC_LOG              "crossing/log"
 #define MQTT_TOPIC_RESTART          "crossing/restart"
 #define MQTT_TOPIC_TELEMETRY_REQ    "crossing/telemetry/req"
+#define MQTT_TOPIC_RSSI             "crossing/rssi"
 
 #define HEARTBEAT_INTERVAL_SEC      60
 #define TELEMETRY_INTERVAL_SEC      300
@@ -164,6 +165,7 @@ struct RuntimeConfig {
     // Debug
     bool debug_enabled = false;
     bool mqtt_logs_enabled = false;
+    bool rssi_telemetry_enabled = true;
 };
 
 struct PulseValidationState {

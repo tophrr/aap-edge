@@ -83,6 +83,7 @@ private:
     // Timers
     unsigned long _lastHeartbeatSec;
     unsigned long _lastTelemetrySec;
+    unsigned long _lastRssiTelemetryMs;
 
     // Config callback
     ConfigCallback _configCb;

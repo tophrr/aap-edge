@@ -42,6 +42,7 @@ NetworkMgr::NetworkMgr()
     , _rttNextPingMs(0)
     , _lastHeartbeatSec(0)
     , _lastTelemetrySec(0)
+    , _lastRssiTelemetryMs(0)
     , _configCb(nullptr)
     , _configRequestCb(nullptr)
     , _telemetryRequestCb(nullptr)
@@ -210,6 +211,18 @@ void NetworkMgr::loop() {
         // Send a new ping every 30 s when not already waiting
         if (!_rttPending && nowMs >= _rttNextPingMs) {
             _pingRtt();
+        }
+
+        // ── WiFi RSSI Telemetry ─────────────────────────────────────────────
+        if (timeSynced() && g_config.rssi_telemetry_enabled) {
+            if (_lastRssiTelemetryMs == 0 || nowMs - _lastRssiTelemetryMs >= 1000) {
+                _lastRssiTelemetryMs = nowMs;
+                int32_t rssi = WiFi.RSSI();
+                time_t timeNow = time(nullptr);
+                char buf[128];
+                snprintf(buf, sizeof(buf), "{\"timestamp\":%lu,\"rssi\":%d}", (unsigned long)timeNow, rssi);
+                _mqttClient.publish(MQTT_TOPIC_RSSI, buf);
+            }
         }
     }
 }
@@ -626,6 +639,7 @@ void NetworkMgr::publishConfigAck(const RuntimeConfig& cfg) {
     doc["ota_port"]             = cfg.ota_port;
     doc["debug_enabled"]        = cfg.debug_enabled;
     doc["mqtt_logs_enabled"]    = cfg.mqtt_logs_enabled;
+    doc["rssi_telemetry_enabled"] = cfg.rssi_telemetry_enabled;
     doc["udp_stream_enabled"]   = cfg.udp_stream_enabled;
     doc["udp_host"]             = cfg.udp_host;
     doc["udp_port"]             = cfg.udp_port;

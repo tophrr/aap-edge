@@ -101,6 +101,10 @@ void configCallback(const char* json) {
             g_config.mqtt_logs_enabled = doc["mqtt_logs_enabled"].as<bool>();
         }
 
+        if (doc["rssi_telemetry_enabled"].is<bool>()) {
+            g_config.rssi_telemetry_enabled = doc["rssi_telemetry_enabled"].as<bool>();
+        }
+
         if (doc["udp_stream_enabled"].is<bool>()) {
             g_config.udp_stream_enabled = doc["udp_stream_enabled"];
         }
@@ -183,6 +187,7 @@ void loadConfigFromNVS(RuntimeConfig& cfg) {
     cfg.ota_port             = prefs.getInt("ota_port", cfg.ota_port);
     cfg.debug_enabled        = prefs.getBool("debug_enabled", cfg.debug_enabled);
     cfg.mqtt_logs_enabled    = prefs.getBool("mqtt_logs", cfg.mqtt_logs_enabled);
+    cfg.rssi_telemetry_enabled = prefs.getBool("rssi_telem_en", cfg.rssi_telemetry_enabled);
 
     cfg.udp_stream_enabled   = prefs.getBool("udp_enabled", cfg.udp_stream_enabled);
     prefs.getString("udp_host", cfg.udp_host, sizeof(cfg.udp_host));
@@ -229,6 +234,7 @@ void saveConfigToNVS(const RuntimeConfig& cfg) {
     prefs.putInt("ota_port", cfg.ota_port);
     prefs.putBool("debug_enabled", cfg.debug_enabled);
     prefs.putBool("mqtt_logs", cfg.mqtt_logs_enabled);
+    prefs.putBool("rssi_telem_en", cfg.rssi_telemetry_enabled);
 
     prefs.putBool("udp_enabled", cfg.udp_stream_enabled);
     prefs.putString("udp_host", cfg.udp_host);
