@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <espMqttClient.h>
 #include "config.h"
 
 class NetworkMgr {
@@ -12,7 +12,7 @@ public:
     void loop();
 
     // Publish helpers
-    bool publish(const char* topic, const char* payload);
+    bool publish(const char* topic, const char* payload, uint8_t qos = 0);
     void publishEvent(const char* eventType, int64_t timestamp,
                       int64_t probingStarted, int64_t activeAt,
                       float duration = 0.0f);
@@ -44,12 +44,14 @@ public:
     using TelemetryRequestCallback = void (*)();
     void onTelemetryRequest(TelemetryRequestCallback cb) { _telemetryRequestCb = cb; }
 
-    // Static MQTT callback dispatcher
-    static void staticMqttCallback(char* topic, byte* payload, unsigned int length);
+    // MQTT async callbacks
+    void onMqttConnect(bool sessionPresent);
+    void onMqttDisconnect(espMqttClientTypes::DisconnectReason reason);
+    void onMqttMessage(const espMqttClientTypes::MessageProperties& properties, const char* topic, const uint8_t* payload, size_t len, size_t index, size_t total);
 
 private:
-    WiFiClient _wifiClient;
-    PubSubClient _mqttClient;
+    espMqttClient _mqttClient;
+    char _clientId[24];
 
     // Singleton pointer for static callback dispatch
     static NetworkMgr* _instance;
@@ -96,6 +98,5 @@ private:
     void _handleWiFiScanResults(bool isRoaming);
     void _applyBssidAndChannel(const uint8_t* bssid, int channel);
     void _connectMQTT();
-    void _mqttCallback(char* topic, byte* payload, unsigned int length);
     void _pingRtt();
 };

@@ -21,8 +21,7 @@ uint8_t temprature_sens_read();  // Returns raw fahr value; convert via (val - 3
 NetworkMgr* NetworkMgr::_instance = nullptr;
 
 NetworkMgr::NetworkMgr()
-    : _mqttClient(_wifiClient)
-    , _wifiConnecting(false)
+    : _wifiConnecting(false)
     , _wifiReconnectMs(0)
     , _wifiWasConnected(false)
     , _wifiScanInProgress(false)
@@ -47,18 +46,28 @@ NetworkMgr::NetworkMgr()
     , _configRequestCb(nullptr)
     , _telemetryRequestCb(nullptr)
 {
+    memset(_clientId, 0, sizeof(_clientId));
+    snprintf(_clientId, sizeof(_clientId), "aap_%08X", (unsigned int)ESP.getEfuseMac());
+    
     _mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-    _mqttClient.setBufferSize(1024);
+    _mqttClient.setClientId(_clientId);
+    if (strlen(MQTT_USERNAME) > 0) {
+        _mqttClient.setCredentials(MQTT_USERNAME, MQTT_PASSWORD);
+    }
+    
+    _mqttClient.onConnect([this](bool sessionPresent) {
+        this->onMqttConnect(sessionPresent);
+    });
+    _mqttClient.onDisconnect([this](espMqttClientTypes::DisconnectReason reason) {
+        this->onMqttDisconnect(reason);
+    });
+    _mqttClient.onMessage([this](const espMqttClientTypes::MessageProperties& properties, const char* topic, const uint8_t* payload, size_t len, size_t index, size_t total) {
+        this->onMqttMessage(properties, topic, payload, len, index, total);
+    });
+
     _instance = this;
 }
 
-// ── Static MQTT Callback Dispatcher ─────────────────────────────────────────
-
-void NetworkMgr::staticMqttCallback(char* topic, byte* payload, unsigned int length) {
-    if (_instance) {
-        _instance->_mqttCallback(topic, payload, length);
-    }
-}
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -78,17 +87,15 @@ void NetworkMgr::begin() {
 }
 
 void NetworkMgr::loop() {
-    // Handle MQTT client loop
+    // Handle MQTT logging
     if (_mqttClient.connected()) {
-        _mqttClient.loop();
-
         // Dequeue and publish logs to MQTT if enabled
         if (g_config.mqtt_logs_enabled && g_logQueue != nullptr) {
             LogMessage msg;
             int sentCount = 0;
             // Limit to 5 logs per loop invocation to prevent flooding/blocking
             while (sentCount < 5 && xQueueReceive(g_logQueue, &msg, 0) == pdPASS) {
-                _mqttClient.publish(MQTT_TOPIC_LOG, msg.text);
+                publish(MQTT_TOPIC_LOG, msg.text, 0);
                 sentCount++;
             }
         }
@@ -221,7 +228,7 @@ void NetworkMgr::loop() {
                 time_t timeNow = time(nullptr);
                 char buf[128];
                 snprintf(buf, sizeof(buf), "{\"timestamp\":%lu,\"rssi\":%d}", (unsigned long)timeNow, rssi);
-                _mqttClient.publish(MQTT_TOPIC_RSSI, buf);
+                publish(MQTT_TOPIC_RSSI, buf, 0);
             }
         }
     }
@@ -235,9 +242,9 @@ bool NetworkMgr::timeSynced() const {
     return time(nullptr) > 100000;  // NTP gives us time > 1973
 }
 
-bool NetworkMgr::publish(const char* topic, const char* payload) {
+bool NetworkMgr::publish(const char* topic, const char* payload, uint8_t qos) {
     if (!_mqttClient.connected()) return false;
-    return _mqttClient.publish(topic, payload);
+    return _mqttClient.publish(topic, qos, false, payload) > 0;
 }
 
 // ── Publish Helpers ─────────────────────────────────────────────────────────
@@ -258,7 +265,7 @@ void NetworkMgr::publishEvent(const char* eventType, int64_t timestamp,
             (long long)timestamp, (double)duration,
             (long long)probingStarted, (long long)activeAt, (long long)timestamp);
     }
-    publish(MQTT_TOPIC_EVENT, buf);
+    publish(MQTT_TOPIC_EVENT, buf, 1);
 }
 
 void NetworkMgr::publishHeartbeat(unsigned long uptimeSec) {
@@ -267,7 +274,7 @@ void NetworkMgr::publishHeartbeat(unsigned long uptimeSec) {
     snprintf(buf, sizeof(buf),
         "{\"timestamp\":%lu,\"uptime_sec\":%lu,\"status\":\"running\"}",
         (unsigned long)now, uptimeSec);
-    if (publish(MQTT_TOPIC_HEARTBEAT, buf)) {
+    if (publish(MQTT_TOPIC_HEARTBEAT, buf, 1)) {
         _lastHeartbeatSec = uptimeSec;
     }
 }
@@ -353,7 +360,7 @@ void NetworkMgr::publishTelemetry(unsigned long uptimeSec, int state, int events
     char buf[768];
     serializeJson(doc, buf, sizeof(buf));
 
-    if (publish(MQTT_TOPIC_TELEMETRY, buf)) {
+    if (publish(MQTT_TOPIC_TELEMETRY, buf, 1)) {
         _lastTelemetrySec = uptimeSec;
         Log.printf("[Telemetry] Published (temp=%.1f°C, rtt=%dms, tasks=%u)\n",
                       tempC, _rttLastMs, (unsigned)taskCount);
@@ -509,53 +516,7 @@ void NetworkMgr::_connectMQTT() {
     Log.print(":");
     Log.println(MQTT_PORT);
 
-    // Set the callback before connecting
-    _mqttClient.setCallback(staticMqttCallback);
-
-    // Try to connect with a unique client ID
-    char clientId[24];
-    snprintf(clientId, sizeof(clientId), "aap_%08X", (unsigned int)ESP.getEfuseMac());
-
-    bool hasMqttCredentials = strlen(MQTT_USERNAME) > 0;
-    bool connected = hasMqttCredentials
-        ? _mqttClient.connect(clientId, MQTT_USERNAME, MQTT_PASSWORD)
-        : _mqttClient.connect(clientId);
-
-    if (connected) {
-        Log.println("[MQTT] Connected");
-        _mqttConnecting = false;
-        _mqttBackoffMs = 1000;
-
-        _mqttClient.subscribe(MQTT_TOPIC_CONFIG);
-        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_CONFIG);
-
-        _mqttClient.subscribe(MQTT_TOPIC_CONFIG_REQ);
-        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_CONFIG_REQ);
-
-        _mqttClient.subscribe(MQTT_TOPIC_RTT);
-        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_RTT);
-
-        _mqttClient.subscribe(MQTT_TOPIC_RESTART);
-        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_RESTART);
-
-        _mqttClient.subscribe(MQTT_TOPIC_TELEMETRY_REQ);
-        Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_TELEMETRY_REQ);
-
-        // Backdate timers so heartbeat + telemetry fire immediately after connect
-        unsigned long uptimeSec = millis() / 1000;
-        _lastHeartbeatSec = (uptimeSec >= HEARTBEAT_INTERVAL_SEC) ? uptimeSec - HEARTBEAT_INTERVAL_SEC : 0;
-        _lastTelemetrySec = (uptimeSec >= TELEMETRY_INTERVAL_SEC) ? uptimeSec - TELEMETRY_INTERVAL_SEC : 0;
-
-        // Kick off first RTT ping after 5 s
-        _rttNextPingMs = millis() + 5000;
-    } else {
-        Log.print("[MQTT] Failed (rc=");
-        Log.print(_mqttClient.state());
-        Log.println(")");
-        _mqttConnecting = false;
-        _mqttBackoffMs = min(_mqttBackoffMs * 2, 30000UL);
-        ++_mqttReconnects;
-    }
+    _mqttClient.connect();
 }
 
 // ── MQTT RTT ─────────────────────────────────────────────────────────────────
@@ -564,18 +525,54 @@ void NetworkMgr::_pingRtt() {
     unsigned long now = millis();
     char payload[24];
     snprintf(payload, sizeof(payload), "%lu", now);
-    if (_mqttClient.publish(MQTT_TOPIC_RTT, payload)) {
+    if (publish(MQTT_TOPIC_RTT, payload, 0)) {
         _rttPending = true;
         _rttSentMs  = now;
         _rttNextPingMs = now + 30000;
     }
 }
 
-// ── MQTT Message Callback ────────────────────────────────────────────────────
+// ── MQTT Async Callbacks ─────────────────────────────────────────────────────
 
-void NetworkMgr::_mqttCallback(char* topic, byte* payload, unsigned int length) {
+void NetworkMgr::onMqttConnect(bool sessionPresent) {
+    Log.printf("[MQTT] Connected (session present: %d)\n", sessionPresent);
+    _mqttConnecting = false;
+    _mqttBackoffMs = 1000;
+
+    _mqttClient.subscribe(MQTT_TOPIC_CONFIG, 1);
+    Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_CONFIG);
+
+    _mqttClient.subscribe(MQTT_TOPIC_CONFIG_REQ, 1);
+    Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_CONFIG_REQ);
+
+    _mqttClient.subscribe(MQTT_TOPIC_RTT, 1);
+    Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_RTT);
+
+    _mqttClient.subscribe(MQTT_TOPIC_RESTART, 1);
+    Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_RESTART);
+
+    _mqttClient.subscribe(MQTT_TOPIC_TELEMETRY_REQ, 1);
+    Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_TELEMETRY_REQ);
+
+    // Backdate timers so heartbeat + telemetry fire immediately after connect
+    unsigned long uptimeSec = millis() / 1000;
+    _lastHeartbeatSec = (uptimeSec >= HEARTBEAT_INTERVAL_SEC) ? uptimeSec - HEARTBEAT_INTERVAL_SEC : 0;
+    _lastTelemetrySec = (uptimeSec >= TELEMETRY_INTERVAL_SEC) ? uptimeSec - TELEMETRY_INTERVAL_SEC : 0;
+
+    // Kick off first RTT ping after 5 s
+    _rttNextPingMs = millis() + 5000;
+}
+
+void NetworkMgr::onMqttDisconnect(espMqttClientTypes::DisconnectReason reason) {
+    Log.printf("[MQTT] Disconnected (reason: %u)\n", (uint8_t)reason);
+    _mqttConnecting = false;
+    _mqttBackoffMs = min(_mqttBackoffMs * 2, 30000UL);
+    ++_mqttReconnects;
+}
+
+void NetworkMgr::onMqttMessage(const espMqttClientTypes::MessageProperties& properties, const char* topic, const uint8_t* payload, size_t len, size_t index, size_t total) {
     char buf[1024];
-    unsigned int copyLen = min(length, (unsigned int)sizeof(buf) - 1);
+    unsigned int copyLen = min(len, (size_t)sizeof(buf) - 1);
     memcpy(buf, payload, copyLen);
     buf[copyLen] = '\0';
 
@@ -583,7 +580,6 @@ void NetworkMgr::_mqttCallback(char* topic, byte* payload, unsigned int length) 
     Log.println(topic);
 
     if (strcmp(topic, MQTT_TOPIC_RTT) == 0) {
-        // Echo back: payload is the millisecond timestamp we sent
         if (_rttPending) {
             unsigned long sentMs = (unsigned long)atoll(buf);
             unsigned long nowMs  = millis();
@@ -646,6 +642,6 @@ void NetworkMgr::publishConfigAck(const RuntimeConfig& cfg) {
 
     char buf[1024];
     serializeJson(doc, buf, sizeof(buf));
-    publish(MQTT_TOPIC_CONFIG_ACK, buf);
+    publish(MQTT_TOPIC_CONFIG_ACK, buf, 1);
     Log.println("[MQTT] Published config acknowledgement");
 }
