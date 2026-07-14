@@ -25,6 +25,11 @@ NetworkMgr::NetworkMgr()
     , _wifiConnecting(false)
     , _wifiReconnectMs(0)
     , _wifiWasConnected(false)
+    , _wifiScanInProgress(false)
+    , _wifiScanStartMs(0)
+    , _wifiRoamingScanInProgress(false)
+    , _lastRssiCheckMs(0)
+    , _lastScanMs(0)
     , _wifiDisconnects(0)
     , _wifiFaults(0)
     , _mqttConnecting(false)
@@ -96,8 +101,68 @@ void NetworkMgr::loop() {
     }
     _wifiWasConnected = wifiNow;
 
+    // ── Wi-Fi scanning progress ────────────────────────────────────────
+    if (_wifiScanInProgress) {
+        int16_t scanResult = WiFi.scanComplete();
+        if (scanResult >= 0) {
+            Log.printf("[WiFi] Connection scan complete. Found %d networks.\n", scanResult);
+            _handleWiFiScanResults(false);
+        } else if (scanResult == WIFI_SCAN_FAILED || (millis() - _wifiScanStartMs > 10000)) {
+            Log.println("[WiFi] Connection scan failed or timed out. Falling back to standard connection.");
+            WiFi.scanDelete();
+            _wifiScanInProgress = false;
+            // Fallback to standard connection
+            _wifiConnecting = true;
+            _wifiReconnectMs = millis();
+            if (strlen(WIFI_EAP_USERNAME) > 0) {
+                Log.println("[WiFi] Connecting to default SSID (WPA2-Enterprise)");
+                WiFi.begin(WIFI_SSID, WIFI_EAP_METHOD, WIFI_EAP_IDENTITY, WIFI_EAP_USERNAME, WIFI_EAP_PASSWORD);
+            } else {
+                Log.println("[WiFi] Connecting to default SSID (WPA2-PSK)");
+                esp_wifi_sta_wpa2_ent_disable();
+                WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+            }
+        }
+    }
+
+    // ── Wi-Fi active roaming scan progress ────────────────────────────────
+    if (_wifiRoamingScanInProgress) {
+        int16_t scanResult = WiFi.scanComplete();
+        if (scanResult >= 0) {
+            Log.printf("[WiFi] Roaming scan complete. Found %d networks.\n", scanResult);
+            _handleWiFiScanResults(true);
+        } else if (scanResult == WIFI_SCAN_FAILED) {
+            Log.println("[WiFi] Roaming scan failed.");
+            WiFi.scanDelete();
+            _wifiRoamingScanInProgress = false;
+        }
+    }
+
+    // ── Wi-Fi active roaming trigger ─────────────────────────────────────
+    if (wifiNow && !_wifiRoamingScanInProgress && !_wifiScanInProgress) {
+        unsigned long now = millis();
+        // Initialize _lastRssiCheckMs if it was 0 (just connected)
+        if (_lastRssiCheckMs == 0) {
+            _lastRssiCheckMs = now;
+        }
+        if (now - _lastRssiCheckMs >= 30000) {
+            _lastRssiCheckMs = now;
+            int32_t currentRSSI = WiFi.RSSI();
+            if (currentRSSI < -75) {
+                if (now - _lastScanMs >= 120000) {
+                    Log.printf("[WiFi] RSSI (%d dBm) below threshold (-75 dBm). Triggering active roaming scan...\n", currentRSSI);
+                    _lastScanMs = now;
+                    _wifiRoamingScanInProgress = true;
+                    WiFi.scanNetworks(true, false, false, 300, 0, WIFI_SSID);
+                } else {
+                    Log.println("[WiFi] RSSI is low, but active roaming scan is rate-limited (last scan < 120s ago).");
+                }
+            }
+        }
+    }
+
     // ── Wi-Fi reconnection ──────────────────────────────────────────────
-    if (!wifiNow && !_wifiConnecting) {
+    if (!wifiNow && !_wifiConnecting && !_wifiScanInProgress) {
         unsigned long now = millis();
         if (now - _wifiReconnectMs >= 5000) {
             _wifiReconnectMs = now;
@@ -115,6 +180,7 @@ void NetworkMgr::loop() {
     // Detect Wi-Fi connected and clear connecting flag
     if (WiFi.status() == WL_CONNECTED && _wifiConnecting) {
         _wifiConnecting = false;
+        _lastRssiCheckMs = millis(); // Reset check timer on successful connection
     }
 
     // ── MQTT reconnection ───────────────────────────────────────────────
@@ -285,18 +351,137 @@ void NetworkMgr::publishTelemetry(unsigned long uptimeSec, int state, int events
 
 void NetworkMgr::_connectWiFi() {
     _wifiConnecting = true;
-    Log.print("[WiFi] Connecting to ");
-    Log.print(WIFI_SSID);
-    
-    WiFi.disconnect(true);
+    _wifiReconnectMs = millis(); // Track the time connection attempt began
+    _startWiFiScan();
+}
 
-    if (strlen(WIFI_EAP_USERNAME) > 0) {
-        Log.println(" (WPA2-Enterprise)");
-        WiFi.begin(WIFI_SSID, WIFI_EAP_METHOD, WIFI_EAP_IDENTITY, WIFI_EAP_USERNAME, WIFI_EAP_PASSWORD);
+void NetworkMgr::_startWiFiScan() {
+    Log.printf("[WiFi] Starting asynchronous scan for SSID: %s\n", WIFI_SSID);
+    WiFi.disconnect(true);
+    _wifiScanInProgress = true;
+    _wifiScanStartMs = millis();
+    WiFi.scanNetworks(true, false, false, 300, 0, WIFI_SSID);
+}
+
+void NetworkMgr::_handleWiFiScanResults(bool isRoaming) {
+    int16_t n = WiFi.scanComplete();
+    _wifiScanInProgress = false;
+    _wifiRoamingScanInProgress = false;
+
+    if (n <= 0) {
+        Log.println("[WiFi] No matching APs found in scan results.");
+        WiFi.scanDelete();
+        if (!isRoaming) {
+            // Fallback to standard connection
+            _wifiConnecting = true;
+            _wifiReconnectMs = millis();
+            if (strlen(WIFI_EAP_USERNAME) > 0) {
+                Log.println("[WiFi] Connecting to default SSID (WPA2-Enterprise)");
+                WiFi.begin(WIFI_SSID, WIFI_EAP_METHOD, WIFI_EAP_IDENTITY, WIFI_EAP_USERNAME, WIFI_EAP_PASSWORD);
+            } else {
+                Log.println("[WiFi] Connecting to default SSID (WPA2-PSK)");
+                esp_wifi_sta_wpa2_ent_disable();
+                WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+            }
+        }
+        return;
+    }
+
+    int bestNetworkIdx = -1;
+    int32_t bestRSSI = -999;
+    
+    for (int i = 0; i < n; i++) {
+        if (WiFi.SSID(i) == WIFI_SSID) {
+            int32_t rssi = WiFi.RSSI(i);
+            if (rssi > bestRSSI) {
+                bestRSSI = rssi;
+                bestNetworkIdx = i;
+            }
+        }
+    }
+
+    if (bestNetworkIdx == -1) {
+        Log.println("[WiFi] No AP with matching SSID found in results.");
+        WiFi.scanDelete();
+        if (!isRoaming) {
+            // Fallback to standard connection
+            _wifiConnecting = true;
+            _wifiReconnectMs = millis();
+            if (strlen(WIFI_EAP_USERNAME) > 0) {
+                Log.println("[WiFi] Connecting to default SSID (WPA2-Enterprise)");
+                WiFi.begin(WIFI_SSID, WIFI_EAP_METHOD, WIFI_EAP_IDENTITY, WIFI_EAP_USERNAME, WIFI_EAP_PASSWORD);
+            } else {
+                Log.println("[WiFi] Connecting to default SSID (WPA2-PSK)");
+                esp_wifi_sta_wpa2_ent_disable();
+                WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+            }
+        }
+        return;
+    }
+
+    uint8_t bestBssid[6];
+    memcpy(bestBssid, WiFi.BSSID(bestNetworkIdx), 6);
+    int32_t bestChannel = WiFi.channel(bestNetworkIdx);
+    
+    Log.printf("[WiFi] Selected best AP: %02X:%02X:%02X:%02X:%02X:%02X (Channel: %d, RSSI: %d dBm)\n",
+               bestBssid[0], bestBssid[1], bestBssid[2], bestBssid[3], bestBssid[4], bestBssid[5],
+               bestChannel, bestRSSI);
+
+    if (isRoaming) {
+        int32_t currentRSSI = WiFi.RSSI();
+        const uint8_t* currentBssid = WiFi.BSSID();
+        
+        bool isSameAp = false;
+        if (currentBssid) {
+            isSameAp = (memcmp(currentBssid, bestBssid, 6) == 0);
+        }
+
+        if (isSameAp) {
+            Log.println("[WiFi] Best AP is already the currently connected AP. No roam needed.");
+        } else if (bestRSSI >= currentRSSI + 8) {
+            Log.printf("[WiFi] Roaming: Current RSSI = %d dBm, New AP RSSI = %d dBm. Roaming to new BSSID...\n",
+                       currentRSSI, bestRSSI);
+            
+            WiFi.disconnect(false);
+            _wifiConnecting = true;
+            _wifiReconnectMs = millis();
+
+            if (strlen(WIFI_EAP_USERNAME) > 0) {
+                WiFi.begin(WIFI_SSID, WIFI_EAP_METHOD, WIFI_EAP_IDENTITY, WIFI_EAP_USERNAME, WIFI_EAP_PASSWORD);
+                _applyBssidAndChannel(bestBssid, bestChannel);
+            } else {
+                esp_wifi_sta_wpa2_ent_disable();
+                WiFi.begin(WIFI_SSID, WIFI_PASSWORD, bestChannel, bestBssid);
+            }
+        } else {
+            Log.printf("[WiFi] Found stronger AP (%d dBm) but difference from current (%d dBm) is less than +8 dBm hysteresis. No roam.\n",
+                       bestRSSI, currentRSSI);
+        }
     } else {
-        Log.println(" (WPA2-PSK)");
-        esp_wifi_sta_wpa2_ent_disable(); // Ensure enterprise mode is off
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        _wifiConnecting = true;
+        _wifiReconnectMs = millis();
+
+        if (strlen(WIFI_EAP_USERNAME) > 0) {
+            WiFi.begin(WIFI_SSID, WIFI_EAP_METHOD, WIFI_EAP_IDENTITY, WIFI_EAP_USERNAME, WIFI_EAP_PASSWORD);
+            _applyBssidAndChannel(bestBssid, bestChannel);
+        } else {
+            esp_wifi_sta_wpa2_ent_disable();
+            WiFi.begin(WIFI_SSID, WIFI_PASSWORD, bestChannel, bestBssid);
+        }
+    }
+
+    WiFi.scanDelete();
+}
+
+void NetworkMgr::_applyBssidAndChannel(const uint8_t* bssid, int channel) {
+    wifi_config_t wifi_cfg;
+    if (esp_wifi_get_config(WIFI_IF_STA, &wifi_cfg) == ESP_OK) {
+        wifi_cfg.sta.bssid_set = true;
+        memcpy(wifi_cfg.sta.bssid, bssid, 6);
+        if (channel > 0) {
+            wifi_cfg.sta.channel = (uint8_t)channel;
+        }
+        esp_wifi_set_config(WIFI_IF_STA, &wifi_cfg);
     }
 }
 

@@ -58,6 +58,11 @@ private:
     bool _wifiConnecting;
     unsigned long _wifiReconnectMs;
     bool _wifiWasConnected;         // tracks previous Wi-Fi state for disconnect detection
+    bool _wifiScanInProgress;       // is connection-phase scan active?
+    unsigned long _wifiScanStartMs; // when connection-phase scan started
+    bool _wifiRoamingScanInProgress;// is active roaming scan active?
+    unsigned long _lastRssiCheckMs; // last time we checked RSSI when connected
+    unsigned long _lastScanMs;      // last time we ran a scan (for rate-limiting)
 
     // Wi-Fi counters
     int _wifiDisconnects;           // number of times Wi-Fi dropped after being connected
@@ -86,6 +91,9 @@ private:
 
     // Internal methods
     void _connectWiFi();
+    void _startWiFiScan();
+    void _handleWiFiScanResults(bool isRoaming);
+    void _applyBssidAndChannel(const uint8_t* bssid, int channel);
     void _connectMQTT();
     void _mqttCallback(char* topic, byte* payload, unsigned int length);
     void _pingRtt();
