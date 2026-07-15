@@ -75,6 +75,7 @@ extern bool g_debugEnabled;
 
 #define ALPHA_ATTACK    0.01f
 #define ALPHA_DECAY     0.20f
+#define ALPHA_SIGNAL    0.20f
 
 // ==========================================
 // FSM TIMING PARAMETERS (Seconds)
@@ -144,6 +145,7 @@ struct RuntimeConfig {
     float amb_freq_hz = AMB_FREQ_HZ;
     float alpha_attack = ALPHA_ATTACK;
     float alpha_decay = ALPHA_DECAY;
+    float alpha_signal = ALPHA_SIGNAL;
 
     // Deep Sleep Parameters
     bool deep_sleep_enabled = DEEP_SLEEP_ENABLED;

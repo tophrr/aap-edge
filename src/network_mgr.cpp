@@ -627,6 +627,7 @@ void NetworkMgr::publishConfigAck(const RuntimeConfig& cfg) {
     doc["amb_freq_hz"]          = cfg.amb_freq_hz;
     doc["alpha_attack"]         = cfg.alpha_attack;
     doc["alpha_decay"]          = cfg.alpha_decay;
+    doc["alpha_signal"]         = cfg.alpha_signal;
     doc["deep_sleep_enabled"]   = cfg.deep_sleep_enabled;
     doc["sleep_start_hour"]     = cfg.sleep_start_hour;
     doc["wake_end_hour"]        = cfg.wake_end_hour;

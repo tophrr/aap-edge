@@ -54,6 +54,7 @@ void configCallback(const char* json) {
         if (doc["amb_freq_hz"].is<float>())          g_config.amb_freq_hz = doc["amb_freq_hz"];
         if (doc["alpha_attack"].is<float>())         g_config.alpha_attack = doc["alpha_attack"];
         if (doc["alpha_decay"].is<float>())          g_config.alpha_decay = doc["alpha_decay"];
+        if (doc["alpha_signal"].is<float>())         g_config.alpha_signal = doc["alpha_signal"];
 
         // Deep Sleep Parameters
         if (doc["deep_sleep_enabled"].is<bool>())    g_config.deep_sleep_enabled = doc["deep_sleep_enabled"];
@@ -177,6 +178,7 @@ void loadConfigFromNVS(RuntimeConfig& cfg) {
     cfg.amb_freq_hz          = prefs.getFloat("amb_freq", cfg.amb_freq_hz);
     cfg.alpha_attack         = prefs.getFloat("alpha_attack", cfg.alpha_attack);
     cfg.alpha_decay          = prefs.getFloat("alpha_decay", cfg.alpha_decay);
+    cfg.alpha_signal         = prefs.getFloat("alpha_signal", cfg.alpha_signal);
 
     cfg.deep_sleep_enabled   = prefs.getBool("ds_enabled", cfg.deep_sleep_enabled);
     cfg.sleep_start_hour     = prefs.getInt("sleep_start", cfg.sleep_start_hour);
@@ -224,6 +226,7 @@ void saveConfigToNVS(const RuntimeConfig& cfg) {
     prefs.putFloat("amb_freq", cfg.amb_freq_hz);
     prefs.putFloat("alpha_attack", cfg.alpha_attack);
     prefs.putFloat("alpha_decay", cfg.alpha_decay);
+    prefs.putFloat("alpha_signal", cfg.alpha_signal);
 
     prefs.putBool("ds_enabled", cfg.deep_sleep_enabled);
     prefs.putInt("sleep_start", cfg.sleep_start_hour);

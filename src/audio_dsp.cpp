@@ -141,11 +141,17 @@ void audioDspTask(void* parameter) {
 
         // Apply asymmetric Exponential Moving Average (EMA) for ambient noise baseline
         static float smoothed_amb_db = 0.0f;
-        static bool amb_initialized = false;
-        if (!amb_initialized) {
+        static float smoothed_main_db = 0.0f;
+        static float smoothed_sec_db = 0.0f;
+        static bool ema_initialized = false;
+        
+        if (!ema_initialized) {
             smoothed_amb_db = amb_db;
-            amb_initialized = true;
+            smoothed_main_db = main_db;
+            smoothed_sec_db = sec_db;
+            ema_initialized = true;
         } else {
+            // Ambient noise (asymmetric EMA)
             if (amb_db > smoothed_amb_db) {
                 // Environment is getting louder -> slow reaction (attack)
                 smoothed_amb_db += g_config.alpha_attack * (amb_db - smoothed_amb_db);
@@ -153,6 +159,10 @@ void audioDspTask(void* parameter) {
                 // Environment is getting quieter -> fast reaction (decay)
                 smoothed_amb_db += g_config.alpha_decay * (amb_db - smoothed_amb_db);
             }
+            
+            // Signal frequencies (symmetric EMA)
+            smoothed_main_db += g_config.alpha_signal * (main_db - smoothed_main_db);
+            smoothed_sec_db += g_config.alpha_signal * (sec_db - smoothed_sec_db);
         }
 
         // ── Verbose debug: keep prints bounded so they don't starve the DSP task ─
@@ -160,8 +170,8 @@ void audioDspTask(void* parameter) {
             static int dspFrame = 0;
             static unsigned long lastDspPrintMs = 0;
             dspFrame++;
-            float main_snr = main_db - smoothed_amb_db;
-            float sec_snr = sec_db - smoothed_amb_db;
+            float main_snr = smoothed_main_db - smoothed_amb_db;
+            float sec_snr = smoothed_sec_db - smoothed_amb_db;
             // Raw sample stats (useful for verifying mic is working)
             int32_t rawMin = rawSamples[0];
             int32_t rawMax = rawSamples[0];
@@ -182,7 +192,7 @@ void audioDspTask(void* parameter) {
                 lastDspPrintMs = nowMs;
                 Log.printf("[DSP] #%d | RMS=%.1fdB raw=[%d,%d] | main=%.1f sec=%.1f amb=%.1f (raw=%.1f) | main_snr=%.1f sec_snr=%.1f\n",
                     dspFrame, (double)rms_db, rawMin, rawMax,
-                    (double)main_db, (double)sec_db, (double)smoothed_amb_db, (double)amb_db,
+                    (double)smoothed_main_db, (double)smoothed_sec_db, (double)smoothed_amb_db, (double)amb_db,
                     (double)main_snr, (double)sec_snr);
             }
         }
@@ -214,7 +224,7 @@ void audioDspTask(void* parameter) {
         }
 
         // Send to FSM task via queue
-        AudioFrame frame = { main_db, sec_db, smoothed_amb_db };
+        AudioFrame frame = { smoothed_main_db, smoothed_sec_db, smoothed_amb_db };
         if (xQueueSend(audioQueue, &frame, pdMS_TO_TICKS(10)) != pdPASS) {
             // Queue full — drop frame (non-critical)
             static int dropCount = 0;
