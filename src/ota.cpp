@@ -4,6 +4,7 @@
 #include <ArduinoOTA.h>
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
+#include <WiFiClientSecure.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -55,8 +56,6 @@ static void remoteOTATask(void* parameter) {
 
     Log.printf("[RemoteOTA] Starting download from: %s\n", url.c_str());
 
-    WiFiClient client;
-    
     // Configure callbacks for HTTPUpdate
     httpUpdate.onStart([]() {
         Log.println("[RemoteOTA] Update Started");
@@ -76,7 +75,16 @@ static void remoteOTATask(void* parameter) {
         Log.printf("[RemoteOTA] Error[%d]: %s\n", err, httpUpdate.getLastErrorString().c_str());
     });
 
-    t_httpUpdate_return ret = httpUpdate.update(client, url);
+    t_httpUpdate_return ret;
+
+    if (url.startsWith("https://")) {
+        WiFiClientSecure clientSecure;
+        clientSecure.setInsecure();
+        ret = httpUpdate.update(clientSecure, url);
+    } else {
+        WiFiClient client;
+        ret = httpUpdate.update(client, url);
+    }
 
     switch (ret) {
         case HTTP_UPDATE_FAILED:
