@@ -169,8 +169,8 @@ struct RuntimeConfig {
 
     // Debug
     bool debug_enabled = false;
-    bool mqtt_logs_enabled = false;
-    bool rssi_telemetry_enabled = true;
+    bool mqtt_logs_enabled = true;
+    bool rssi_telemetry_enabled = false;
 };
 
 struct PulseValidationState {
