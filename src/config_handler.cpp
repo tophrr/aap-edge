@@ -89,7 +89,6 @@ void configCallback(const char* json) {
                 ArduinoOTA.end();
             }
         }
-
         // Debug
         if (doc["debug_enabled"].is<bool>()) {
             g_debugEnabled = doc["debug_enabled"].as<bool>();

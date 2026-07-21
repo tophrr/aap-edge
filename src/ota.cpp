@@ -2,6 +2,10 @@
 #include "config.h"
 #include <Arduino.h>
 #include <ArduinoOTA.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 // ── OTA Initialisation ────────────────────────────────────────────────────────
 
@@ -41,4 +45,76 @@ void initOTA() {
     } else {
         Log.println("[OTA] Disabled by config");
     }
+}
+
+// ── Remote OTA Task ─────────────────────────────────────────────────────────
+
+static void remoteOTATask(void* parameter) {
+    String url = (char*)parameter;
+    free(parameter);
+
+    Log.printf("[RemoteOTA] Starting download from: %s\n", url.c_str());
+
+    WiFiClient client;
+    
+    // Configure callbacks for HTTPUpdate
+    httpUpdate.onStart([]() {
+        Log.println("[RemoteOTA] Update Started");
+    });
+    httpUpdate.onEnd([]() {
+        Log.println("[RemoteOTA] Update Finished, restarting...");
+    });
+    httpUpdate.onProgress([](int current, int total) {
+        static int lastPercent = 0;
+        int percent = (current * 100) / total;
+        if (percent != lastPercent && percent % 10 == 0) {
+            Log.printf("[RemoteOTA] Progress: %d%%\n", percent);
+            lastPercent = percent;
+        }
+    });
+    httpUpdate.onError([](int err) {
+        Log.printf("[RemoteOTA] Error[%d]: %s\n", err, httpUpdate.getLastErrorString().c_str());
+    });
+
+    t_httpUpdate_return ret = httpUpdate.update(client, url);
+
+    switch (ret) {
+        case HTTP_UPDATE_FAILED:
+            Log.printf("[RemoteOTA] HTTP_UPDATE_FAILED Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+            break;
+        case HTTP_UPDATE_NO_UPDATES:
+            Log.println("[RemoteOTA] HTTP_UPDATE_NO_UPDATES");
+            break;
+        case HTTP_UPDATE_OK:
+            Log.println("[RemoteOTA] HTTP_UPDATE_OK");
+            ESP.restart();
+            break;
+    }
+
+    // Delete self if it fails
+    vTaskDelete(NULL);
+}
+
+void startRemoteOTA(const char* url) {
+    if (!g_config.ota_enabled) {
+        Log.println("[RemoteOTA] Blocked: OTA is disabled in config");
+        return;
+    }
+    
+    // Copy URL to heap so it survives until task reads it
+    char* urlCopy = strdup(url);
+    if (!urlCopy) {
+        Log.println("[RemoteOTA] Failed to allocate memory for URL");
+        return;
+    }
+
+    // Create a high priority task to perform the update
+    xTaskCreate(
+        remoteOTATask,
+        "remoteOTA",
+        8192,
+        (void*)urlCopy,
+        10, // high priority
+        NULL
+    );
 }

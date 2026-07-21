@@ -28,6 +28,7 @@ extern bool g_debugEnabled;
     #define MQTT_PORT           1883
     #define MQTT_USERNAME       ""
     #define MQTT_PASSWORD       ""
+    #define OTA_TOKEN           "default_secret_token"
 #endif
 
 // ==========================================
@@ -44,6 +45,7 @@ extern bool g_debugEnabled;
 #define MQTT_TOPIC_RESTART          "crossing/restart"
 #define MQTT_TOPIC_TELEMETRY_REQ    "crossing/telemetry/req"
 #define MQTT_TOPIC_RSSI             "crossing/rssi"
+#define MQTT_TOPIC_OTA_TRIGGER      "crossing/ota/trigger"
 
 #define HEARTBEAT_INTERVAL_SEC      60
 #define TELEMETRY_INTERVAL_SEC      300
@@ -158,6 +160,7 @@ struct RuntimeConfig {
     // OTA Parameters
     bool ota_enabled = OTA_ENABLED;
     int ota_port = OTA_PORT;
+    char ota_token[64] = OTA_TOKEN;
 
     // UDP Audio Streaming
     bool udp_stream_enabled = false;

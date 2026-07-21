@@ -6,6 +6,7 @@
 #include <esp_system.h>       // esp_reset_reason()
 #include <esp_chip_info.h>
 #include <ArduinoJson.h>
+#include "ota.h"
 
 // ── Internal temperature sensor ──
 #ifdef __cplusplus
@@ -554,6 +555,9 @@ void NetworkMgr::onMqttConnect(bool sessionPresent) {
     _mqttClient.subscribe(MQTT_TOPIC_TELEMETRY_REQ, 1);
     Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_TELEMETRY_REQ);
 
+    _mqttClient.subscribe(MQTT_TOPIC_OTA_TRIGGER, 1);
+    Log.print("[MQTT] Subscribed to "); Log.println(MQTT_TOPIC_OTA_TRIGGER);
+
     // Backdate timers so heartbeat + telemetry fire immediately after connect
     unsigned long uptimeSec = millis() / 1000;
     _lastHeartbeatSec = (uptimeSec >= HEARTBEAT_INTERVAL_SEC) ? uptimeSec - HEARTBEAT_INTERVAL_SEC : 0;
@@ -604,6 +608,23 @@ void NetworkMgr::onMqttMessage(const espMqttClientTypes::MessageProperties& prop
     } else if (strcmp(topic, MQTT_TOPIC_TELEMETRY_REQ) == 0) {
         if (_telemetryRequestCb) {
             _telemetryRequestCb();
+        }
+    } else if (strcmp(topic, MQTT_TOPIC_OTA_TRIGGER) == 0) {
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, buf);
+        if (!error && doc["url"].is<const char*>() && doc["token"].is<const char*>()) {
+            const char* url = doc["url"].as<const char*>();
+            const char* token = doc["token"].as<const char*>();
+            
+            // Check token against configured ota_token
+            if (strlen(g_config.ota_token) > 0 && strcmp(token, g_config.ota_token) == 0) {
+                Log.println("[MQTT] Valid OTA trigger received. Starting OTA...");
+                startRemoteOTA(url);
+            } else {
+                Log.println("[MQTT] Invalid OTA token received. Ignoring.");
+            }
+        } else {
+            Log.println("[MQTT] OTA trigger invalid (missing URL or token).");
         }
     }
 }
